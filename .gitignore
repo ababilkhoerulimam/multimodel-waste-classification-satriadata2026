@@ -5,6 +5,7 @@
 # ---- Dataset (gambar & arsip, jangan di-push ke Git) ----
 /train/
 /test/
+/Waste Classification Dataset/
 *.zip
 *.tar
 *.tar.gz
