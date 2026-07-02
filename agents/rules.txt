@@ -1,0 +1,36 @@
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 1: DISCOVERY                                           │
+│ 1. Ababil Stage 1-2 → Problem Understanding & Data Audit    │
+│ 2. Vierico B1 → Business Problem Brief                      │
+│ 3. Jeremy E1-E7 → Deep EDA data mentah                      │
+│ 4. Vierico B2 → EDA Business Commentary                     │
+│ 5. Handoff Exploration Report ke Ababil                     │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 2: STRATEGY & FEATURE ENGINEERING                      │
+│ 6. Ababil Stage 3-7 → Technical EDA, Strategy, Validation   │
+│ 7. Vierico B3 → Strategy Review (VETO jika perlu)           │
+│ 8. Ababil Stage 8 → Feature Engineering Proposal            │
+│    - Leakage check (Rule 12)                                │
+│    - Vierico review feature set                             │
+│    - User jalankan kode FE                                  │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 3: POST-FE VALIDATION (THE MISSING LINK!)              │
+│ 9. Ababil DELEGATE ke Jeremy (Stage E9):                    │
+│    "Plot fitur baru terhadap target"                        │
+│ 10. Jeremy bikin visualisasi → Post-FE Business Insight     │
+│ 11. Vierico (opsional) → tambah narasi bisnis               │
+│ 12. Ababil terima laporan → BARU bisa lanjut                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ FASE 4: MODELING & OPTIMIZATION                             │
+│ 13. Ababil Stage 9-17 → Baseline, Training, Tuning, Ensemble│
+│     (Dengan mata terbuka karena sudah tahu insight bisnis)  │
+│ 14. Vierico B4 → Error Cost Assessment                      │
+│ 15. Vierico B5 → Explainability Narrative                   │
+│ 16. Vierico B6 → Executive Summary                          │
+└─────────────────────────────────────────────────────────────┘
