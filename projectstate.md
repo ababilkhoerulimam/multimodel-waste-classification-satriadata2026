@@ -9,8 +9,8 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - Metric                : Macro-averaged F1-Score
 - Submission budget     : 3 / 3 (SANGAT KRITIS! Maksimal 3 submission untuk SELURUH kompetisi)
 - Submissions used today: 0 / 3
-- Last updated          : 2 Juli 2026
-- Updated by            : System / Strategic Decisions Applied (Ababil/Vierico)
+- Last updated          : 3 Juli 2026
+- Updated by            : Ababil (DataLoader implementation session)
 
 ## COMPUTING RESOURCES
 - **Preferred platform**: 
@@ -32,10 +32,10 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - **Catatan Kritis untuk Ababil**: Dengan 16GB VRAM, **ConvNeXt V2-Tiny** (28.6M) aman dengan batch size 64 (AMP ON). **JANGAN coba ConvNeXt V2-Base** (88.7M) di awal — risikonya OOM atau training terlalu lambat untuk diiterasi. Base hanya dipertimbangkan jika waktu & VRAM berlebih setelah Fase 3 selesai.
 
 ## CURRENT STATUS
-- Active phase          : FASE 2 — DATA PIPELINE & CV SETUP (Ababil)
-- Last completed stage  : EDA Complete + Strategic Decisions Finalized
-- Next action           : Ababil membuat DataLoader final dengan StratifiedGroupKFold, exclude `O_8873.jpg`, exclude 97 train-test dupe untuk CV, dan **WAJIB menggunakan `submission.csv` sebagai template urutan ID untuk test loader**.
-- Blocker (if any)      : **TIDAK ADA BLOCKER UNTUK TRAINING** — semua keputusan Flag 3, 6, 7 sudah final. Hanya ada investigasi baru (paper overlap) yang di-hold.
+- Active phase          : FASE 1 — FONDASI (DataLoader + Baseline) — dalam progress
+- Last completed stage  : `train_master_with_groups.csv` selesai & tervalidasi (Cell 1-6). StratifiedGroupKFold split (Cell 7-9) sudah ditulis tapi **BELUM berhasil dijalankan** karena blocker environment (lihat di bawah).
+- Next action           : **Ababil** benerin environment (lihat Blocker), lalu re-run Cell 7 (StratifiedGroupKFold split) → Cell 8 (group integrity + class balance check, termasuk deviation check >2pp) → Cell 9 (save `train_master_with_folds.csv`). Setelah fold clean, lanjut ke test loader (baca `submission.csv` sbg source of truth urutan ID) dan baseline ConvNeXt V2-Tiny training.
+- Blocker (if any)      : 🔴 **ACTIVE — Environment error saat `from sklearn.model_selection import StratifiedGroupKFold`.** Traceback: `ImportError: cannot import name '_center' from 'numpy.core._multiarray_umath'`. Root cause diagnosis: mismatch versi numpy vs scipy/scikit-learn — numpy yang ter-load kemungkinan versi lama (struktur folder `numpy/core/` bukan `numpy/_core/`) sementara scipy/sklearn dikompilasi untuk numpy versi baru. Environment: Windows, path `C:\Users\Ababil Khoerul Imam\AppData\Local\Programs\Python\Python311\` — kemungkinan Python global (bukan venv terisolasi). Ababil akan benerin manual besok. **Fix yang disarankan (belum dieksekusi):** (1) cek versi `numpy`, `scipy`, `sklearn` dulu; (2) `pip install --upgrade --force-reinstall numpy`; (3) jika masih konflik, upgrade scipy+sklearn bareng; (4) pertimbangkan setup venv/conda khusus project supaya tidak konflik lagi ke depannya.
 
 ## DATASET
 - Train file    : `train/` folder — 26.527 images (rows), 3 classes (subfolders)
@@ -287,9 +287,9 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - [x] **Strategi Modeling**: ConvNeXt V2-Tiny sebagai anchor, Class-Balanced Loss, CutMix kondisional. **CLOSED per Sonnet Revision.**
 
 ### 🔴 HIGH — NEXT ACTIONS (Ababil)
-- [ ] **Ababil** implementasikan DataLoader final dengan:
-  - StratifiedGroupKFold (n=5, seed=42, group_col=duplicate_group_id)
-  - Exclude list untuk CV: 97 overlap + `O_8873.jpg`
+- [x] **Ababil** — Group ID assignment untuk StratifiedGroupKFold: SELESAI. `train_master_with_groups.csv` tersimpan (26.527 baris, 26.463 unique groups setelah exact-dup + 2 near-dup Electronic pairs `627(1)/627.jpeg` & `629(1)/629.jpeg` digabung manual). exclude_from_cv=97 (match), exclude_from_training=1 (`O_8873.jpg`, match). Semua assertion PASSED termasuk cross-class group check.
+- [ ] **Ababil** — 🔴 **BLOCKED**: Jalankan StratifiedGroupKFold split (Cell 7-9, kode sudah final & di-review). Tertahan oleh environment error (lihat CURRENT STATUS → Blocker). Setelah fix, jalankan ulang dan cek: (a) group integrity (no group span multi-fold), (b) class balance per fold + deviation dari global ratio (warning kalau >2pp, khususnya untuk Electronic).
+- [ ] **Ababil** implementasikan sisa DataLoader final:
   - Converter `.convert("RGB")` untuk handle RGBA (2 file) & Palette (17 file)
   - Resize strategy: minimal 224×224, pakai lanczos/padding (hindari naive upscale untuk 150×150)
   - **Test Loader WAJIB** membaca `submission.csv` sebagai source of truth urutan ID (1-1458). Prediksi harus ditulis kembali ke CSV dengan urutan yang persis sama (Constraint 4).
@@ -338,6 +338,8 @@ Saat ganti akun Claude (limit habis), lakukan urutan ini:
 ## CATATAN BEBAS
 Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 
+- **[3 Juli 2026] [Ababil]:** DataLoader Fase 1 — bagian group-assignment SELESAI dan tervalidasi (`train_master_with_groups.csv`). Ditemukan 2 pasang near-duplicate baru di Electronic (`627(1).jpeg`/`627.jpeg`, `629(1).jpeg`/`629.jpeg`) dari `near_duplicate_candidates.csv` — bukan exact MD5, tapi disepakati treatment: gabung jadi 1 duplicate_group_id sama seperti exact-dup lain (aman & murah, tidak perlu delegasi Jeremy). Sudah masuk ke group logic.
+- **[3 Juli 2026] [Ababil]:** StratifiedGroupKFold split (Cell 7-9) ditulis & di-review, tapi **gagal jalan** karena environment error — numpy/scipy/scikit-learn version mismatch (`ImportError: cannot import name '_center' from 'numpy.core._multiarray_umath'`) di local machine Windows. Ababil akan perbaiki environment besok (kemungkinan perlu reinstall numpy atau setup venv terisolasi). **INI BLOCKER AKTIF** — catat di CURRENT STATUS.
 - **[2 Juli 2026] [System]:** **Strategi Sonnet 5 (Revisi) secara resmi diadopsi** sebagai pedoman modeling. Semua keputusan di `## MODELING STRATEGY` dan `## EXPERIMENT ROADMAP` adalah LOCKED dan tidak boleh diubah tanpa konsensus tim.
 - **[2 Juli 2026] [Ababil/Vierico]:** SEMUA KEPUTUSAN STRATEGI FINAL. Ringkasan:
   - Flag 3 (train-test dupe): Split strategy — exclude utk CV, full + override utk final.
