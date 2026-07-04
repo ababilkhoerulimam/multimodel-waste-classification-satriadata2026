@@ -17,6 +17,7 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
   - **Vast.ai** (bayar per jam, fleksibel) — direkomendasikan.
   - **Kaggle** (gratis, tapi terbatas 30 jam/minggu & session timeout 9 jam).
 - **GPU options (Vast.ai)**: 
+  - RTX 5090 32GB
   - RTX 4080 Super 16GB
   - RTX 5070 16GB
   - RTX 5080 16GB
@@ -33,17 +34,22 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 
 ## CURRENT STATUS
 - Active phase          : FASE 1 — FONDASI (DataLoader + Baseline) — dalam progress
-- Last completed stage  : `train_master_with_groups.csv` selesai & tervalidasi (Cell 1-6). StratifiedGroupKFold split (Cell 7-9) sudah ditulis tapi **BELUM berhasil dijalankan** karena blocker environment (lihat di bawah).
-- Next action           : **Ababil** benerin environment (lihat Blocker), lalu re-run Cell 7 (StratifiedGroupKFold split) → Cell 8 (group integrity + class balance check, termasuk deviation check >2pp) → Cell 9 (save `train_master_with_folds.csv`). Setelah fold clean, lanjut ke test loader (baca `submission.csv` sbg source of truth urutan ID) dan baseline ConvNeXt V2-Tiny training.
-- Blocker (if any)      : 🔴 **ACTIVE — Environment error saat `from sklearn.model_selection import StratifiedGroupKFold`.** Traceback: `ImportError: cannot import name '_center' from 'numpy.core._multiarray_umath'`. Root cause diagnosis: mismatch versi numpy vs scipy/scikit-learn — numpy yang ter-load kemungkinan versi lama (struktur folder `numpy/core/` bukan `numpy/_core/`) sementara scipy/sklearn dikompilasi untuk numpy versi baru. Environment: Windows, path `C:\Users\Ababil Khoerul Imam\AppData\Local\Programs\Python\Python311\` — kemungkinan Python global (bukan venv terisolasi). Ababil akan benerin manual besok. **Fix yang disarankan (belum dieksekusi):** (1) cek versi `numpy`, `scipy`, `sklearn` dulu; (2) `pip install --upgrade --force-reinstall numpy`; (3) jika masih konflik, upgrade scipy+sklearn bareng; (4) pertimbangkan setup venv/conda khusus project supaya tidak konflik lagi ke depannya.
+- Last completed stage  : StratifiedGroupKFold split SELESAI & tervalidasi (5 fold, group integrity PASSED, class balance deviation maksimum 0.02pp — sangat baik). Test loader (submission.csv sebagai source of truth) SELESAI & tervalidasi (1458/1458 file match). RGB/Palette/RGBA/Grayscale converter (`load_image_as_rgb`) SELESAI & tervalidasi untuk semua mode ditemukan.
+- Next action           : Ababil lanjut ke PyTorch Dataset/DataLoader class (pakai `train_master_with_folds.csv` + `load_image_as_rgb` converter + resize strategy), lalu baseline training ConvNeXt V2-Tiny (224px, tanpa augmentasi kompleks dulu).
+- Blocker (if any)      : ✅ **RESOLVED** — Environment error (numpy/scipy/sklearn version mismatch) sudah diperbaiki oleh Ababil. StratifiedGroupKFold berjalan normal.
 
 ## DATASET
 - Train file    : `train/` folder — 26.527 images (rows), 3 classes (subfolders)
-- Test file     : `test/` folder — 1.458 images (rows). **Template urutan ID ada di `submission.csv` (ID 1 s.d. 1458) — WAJIB dijaga persis.**
+- Test file     : `test/` folder — 1.458 images (rows). **Template urutan ID ada di `submission.csv` (ID 1 s.d. 1458) — WAJIB dijaga persis.** (Tervalidasi: 1458/1458 file match, urutan aman.)
 - Target column : `predicted` (di submission.csv) -> Mapping: 0=Recyclable, 1=Electronic, 2=Organic
 - Task type     : Multiclass Image Classification
 - Time-based    : NO
 - Leakage status: **CONFIRMED — 97/1458 test files (6,65%) exact-duplicate (MD5) dengan train files. Detail di Risk Flag 3.**
+- **🆕 UPDATE Image Mode Audit (3 Juli 2026, full scan — koreksi dari estimasi EDA sebelumnya):**
+  - Train non-RGB: **312 file total** (bukan ~19 seperti estimasi lama — EDA sebelumnya kemungkinan hanya sampling): 293 Palette (`P`), 17 RGBA, 2 Grayscale (`L`)
+  - Test non-RGB: **5 file**, semua Palette (`P`)
+  - Semua mode berhasil dikonversi ke RGB dengan aman via fungsi `load_image_as_rgb()` (RGBA di-composite ke background putih untuk hindari halo hitam di pixel transparan; P/L pakai `.convert("RGB")` standard)
+  - **Outlier baru ditemukan**: `614.jpg` (train, grayscale) resolusi **3856×3856** — jauh di atas mayoritas file lain. Perlu diperhatikan saat resize/preprocessing strategy (kandidat untuk dicek lebih lanjut, worth di-flag ke Jeremy kalau ada waktu).
 
 ## EXPLORATION REPORT STATUS (Jeremy)
 - Jeremy stage saat ini : E8 (EDA COMPLETE — semua checklist selesai)
@@ -288,11 +294,10 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 
 ### 🔴 HIGH — NEXT ACTIONS (Ababil)
 - [x] **Ababil** — Group ID assignment untuk StratifiedGroupKFold: SELESAI. `train_master_with_groups.csv` tersimpan (26.527 baris, 26.463 unique groups setelah exact-dup + 2 near-dup Electronic pairs `627(1)/627.jpeg` & `629(1)/629.jpeg` digabung manual). exclude_from_cv=97 (match), exclude_from_training=1 (`O_8873.jpg`, match). Semua assertion PASSED termasuk cross-class group check.
-- [ ] **Ababil** — 🔴 **BLOCKED**: Jalankan StratifiedGroupKFold split (Cell 7-9, kode sudah final & di-review). Tertahan oleh environment error (lihat CURRENT STATUS → Blocker). Setelah fix, jalankan ulang dan cek: (a) group integrity (no group span multi-fold), (b) class balance per fold + deviation dari global ratio (warning kalau >2pp, khususnya untuk Electronic).
-- [ ] **Ababil** implementasikan sisa DataLoader final:
-  - Converter `.convert("RGB")` untuk handle RGBA (2 file) & Palette (17 file)
-  - Resize strategy: minimal 224×224, pakai lanczos/padding (hindari naive upscale untuk 150×150)
-  - **Test Loader WAJIB** membaca `submission.csv` sebagai source of truth urutan ID (1-1458). Prediksi harus ditulis kembali ke CSV dengan urutan yang persis sama (Constraint 4).
+- [x] **Ababil** — StratifiedGroupKFold split: SELESAI. `train_master_with_folds.csv` tersimpan. 5 fold (5285-5286 tiap fold), group integrity PASSED (tidak ada grup terbelah), class balance deviation maksimum 0.02pp dari global ratio (Recyclable 37.83%, Electronic 14.98%, Organic 47.19%) — jauh di bawah threshold 2pp, tidak ada tindakan lanjutan diperlukan.
+- [x] **Ababil** — Test loader: SELESAI. `submission.csv` dipakai sebagai source of truth urutan ID, semua 1458 file test tervalidasi ada di disk & urutan match.
+- [x] **Ababil** — Image mode converter (`load_image_as_rgb`): SELESAI & tervalidasi untuk P/RGBA/L (lihat update di DATASET section untuk angka detail).
+- [ ] **Ababil** — bangun PyTorch Dataset/DataLoader class yang menggabungkan: `train_master_with_folds.csv` (untuk train/val split per fold) + `load_image_as_rgb()` converter + resize strategy (minimal 224×224, perhatikan outlier `614.jpg` 3856×3856 — hindari naive upscale/downscale ekstrem tanpa pertimbangan)
 - [ ] **Ababil** jalankan **Baseline Training ConvNeXt V2-Tiny** (resolusi 224, tanpa CutMix/Mixup, tanpa Class-Balanced Loss dulu) sebagai titik referensi bersih.
 - [ ] **Ababil/Jeremy** jalankan **Grad-CAM check** segera setelah baseline convergen — hasilnya menentukan apakah CutMix masuk roadmap atau tidak.
 - [ ] **Ababil** implementasikan **Class-Balanced Loss** + Weighted Random Sampler di eksperimen kedua (setelah baseline & Grad-CAM selesai).
@@ -338,8 +343,9 @@ Saat ganti akun Claude (limit habis), lakukan urutan ini:
 ## CATATAN BEBAS
 Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 
+- **[3 Juli 2026] [Ababil]:** Environment fixed (numpy/scipy/sklearn version mismatch resolved). StratifiedGroupKFold split berjalan sempurna — class balance deviation maksimum hanya 0.02pp, jauh lebih baik dari perkiraan awal (khawatir grup Electronic yang besar bikin timpang, ternyata tidak terjadi).
+- **[3 Juli 2026] [Ababil]:** Test loader & image mode converter selesai. **Koreksi penting**: full scan menunjukkan non-RGB train file jauh lebih banyak dari estimasi EDA lama (312 vs ~19) — didominasi Palette mode (293 file), bukan cuma RGBA. Test set juga punya 5 file Palette. Semua berhasil dikonversi aman via composite-to-white (RGBA) / standard convert (P, L). Ditemukan outlier baru: `614.jpg` grayscale resolusi 3856×3856 — jauh di atas mayoritas, perlu perhatian khusus di resize strategy.
 - **[3 Juli 2026] [Ababil]:** DataLoader Fase 1 — bagian group-assignment SELESAI dan tervalidasi (`train_master_with_groups.csv`). Ditemukan 2 pasang near-duplicate baru di Electronic (`627(1).jpeg`/`627.jpeg`, `629(1).jpeg`/`629.jpeg`) dari `near_duplicate_candidates.csv` — bukan exact MD5, tapi disepakati treatment: gabung jadi 1 duplicate_group_id sama seperti exact-dup lain (aman & murah, tidak perlu delegasi Jeremy). Sudah masuk ke group logic.
-- **[3 Juli 2026] [Ababil]:** StratifiedGroupKFold split (Cell 7-9) ditulis & di-review, tapi **gagal jalan** karena environment error — numpy/scipy/scikit-learn version mismatch (`ImportError: cannot import name '_center' from 'numpy.core._multiarray_umath'`) di local machine Windows. Ababil akan perbaiki environment besok (kemungkinan perlu reinstall numpy atau setup venv terisolasi). **INI BLOCKER AKTIF** — catat di CURRENT STATUS.
 - **[2 Juli 2026] [System]:** **Strategi Sonnet 5 (Revisi) secara resmi diadopsi** sebagai pedoman modeling. Semua keputusan di `## MODELING STRATEGY` dan `## EXPERIMENT ROADMAP` adalah LOCKED dan tidak boleh diubah tanpa konsensus tim.
 - **[2 Juli 2026] [Ababil/Vierico]:** SEMUA KEPUTUSAN STRATEGI FINAL. Ringkasan:
   - Flag 3 (train-test dupe): Split strategy — exclude utk CV, full + override utk final.
