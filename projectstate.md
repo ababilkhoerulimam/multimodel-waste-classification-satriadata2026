@@ -13,29 +13,27 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - Updated by            : Ababil (DataLoader implementation session)
 
 ## COMPUTING RESOURCES
+- **Status aktual (3 Juli 2026)**: Development/testing SEMENTARA di **Kaggle (Tesla T4, 15.6GB VRAM)** — dipakai karena belum masuk fase training berat & belum ada konfirmasi hardware final dari dosen. **Rencana pindah ke RTX 4090 (kemungkinan, belum fix)** setelah konfirmasi. Sebelumnya sempat dibahas opsi 4080S/5070/5080/5090 (Vast.ai) — itu SUPERSEDED, treat sebagai historical context saja, bukan rencana aktif.
 - **Preferred platform**: 
-  - **Vast.ai** (bayar per jam, fleksibel) — direkomendasikan.
-  - **Kaggle** (gratis, tapi terbatas 30 jam/minggu & session timeout 9 jam).
-- **GPU options (Vast.ai)**: 
-  - RTX 4080 Super 16GB
-  - RTX 5070 16GB
-  - RTX 5080 16GB
-  (Semua opsi di atas memiliki VRAM 16GB — cukup untuk mayoritas backbone sampai skala ConvNeXt-Base / ViT-B/16).
-- **Coding constraints for Ababil (berlaku untuk semua opsi GPU 16GB)**:
+  - **Kaggle** (gratis, T4 16GB) — dipakai SEKARANG untuk development pipeline & baseline testing ringan.
+  - **Vast.ai** (bayar per jam, fleksibel) — untuk training berat, GPU spesifik TBD (kemungkinan RTX 4090, belum konfirmasi dosen).
+  - Kaggle terbatas 30 jam/minggu & session timeout 9 jam.
+- **Coding constraints for Ababil (berlaku umum untuk GPU ~16GB, termasuk T4)**:
   - **Batch size awal (tanpa gradient accumulation)**: 
     - EfficientNet-B0/B1 → 64
     - ResNet50 / EfficientNet-B3 → 32
     - ConvNeXt-Base / ViT-B/16 → 16
-  - **WAJIB** aktifkan `torch.cuda.amp` (mixed precision) untuk menghemat VRAM dan mempercepat training ~2x.
-  - Jika pakai **Kaggle**: simpan checkpoint ke `/kaggle/working/` dan download sebelum session timeout (9 jam). Jangan andalkan penyimpanan permanen.
+    - ConvNeXt V2-Tiny → 64 (tervalidasi jalan di Tesla T4 15.6GB, lihat CURRENT STATUS)
+  - **WAJIB** aktifkan `torch.cuda.amp` (mixed precision) untuk menghemat VRAM dan mempercepat training ~2x. **Catatan teknis**: `torch.cuda.amp.GradScaler` sudah deprecated di PyTorch 2.10+, gunakan `torch.amp.GradScaler('cuda')` sebagai gantinya.
+  - Jika pakai **Kaggle**: simpan checkpoint ke `/kaggle/working/` (`output_dir`) dan download sebelum session timeout (9 jam). Jangan andalkan penyimpanan permanen. **PENTING: `/kaggle/input/` READ-ONLY — semua operasi `.to_csv()`/checkpoint WAJIB ke `output_dir`, bukan `data_dir`.**
   - Jika pakai **Vast.ai**: pastikan instance memiliki penyimpanan lokal yang cukup untuk dataset (±5-10 GB setelah ekstraksi).
-- **Catatan Kritis untuk Ababil**: Dengan 16GB VRAM, **ConvNeXt V2-Tiny** (28.6M) aman dengan batch size 64 (AMP ON). **JANGAN coba ConvNeXt V2-Base** (88.7M) di awal — risikonya OOM atau training terlalu lambat untuk diiterasi. Base hanya dipertimbangkan jika waktu & VRAM berlebih setelah Fase 3 selesai.
+- **Catatan Kritis untuk Ababil**: Dengan ~16GB VRAM (T4 atau RTX 16GB-class), **ConvNeXt V2-Tiny** (28.6M) aman dengan batch size 64 (AMP ON) — **tervalidasi jalan di Tesla T4**. **JANGAN coba ConvNeXt V2-Base** (88.7M) di awal — risikonya OOM atau training terlalu lambat untuk diiterasi. Base hanya dipertimbangkan jika waktu & VRAM berlebih setelah Fase 3 selesai, ATAU jika sudah pindah ke hardware lebih besar (RTX 4090 dsb.) dan dikonfirmasi aman.
 
 ## CURRENT STATUS
-- Active phase          : FASE 1 — FONDASI (DataLoader + Baseline) — dalam progress
-- Last completed stage  : StratifiedGroupKFold split SELESAI & tervalidasi (5 fold, group integrity PASSED, class balance deviation maksimum 0.02pp — sangat baik). Test loader (submission.csv sebagai source of truth) SELESAI & tervalidasi (1458/1458 file match). RGB/Palette/RGBA/Grayscale converter (`load_image_as_rgb`) SELESAI & tervalidasi untuk semua mode ditemukan.
-- Next action           : Ababil lanjut ke PyTorch Dataset/DataLoader class (pakai `train_master_with_folds.csv` + `load_image_as_rgb` converter + resize strategy), lalu baseline training ConvNeXt V2-Tiny (224px, tanpa augmentasi kompleks dulu).
-- Blocker (if any)      : ✅ **RESOLVED** — Environment error (numpy/scipy/sklearn version mismatch) sudah diperbaiki oleh Ababil. StratifiedGroupKFold berjalan normal.
+- Active phase          : FASE 1 SELESAI → FASE 2 (Diagnostik) — Grad-CAM check sekarang jadi satu-satunya gate tersisa sebelum Fase 3
+- Last completed stage  : **Baseline training (exp001) SELESAI**, val_macro_f1=0.9823 (fold 0, epoch 10). **Subpopulation sensitivity check (icon 150×150 vs foto natural) SELESAI — hipotesis shortcut ukuran/format DITOLAK.** Gap recall icon vs natural hanya 0.0009 (Icon=0.9927, Natural=0.9918) — model generalize sama baik di kedua subpopulasi Electronic. F1 Electronic tinggi (0.994) kemungkinan genuine, bukan artefak ukuran gambar.
+- Next action           : **Grad-CAM check WAJIB tetap jalan** — bukan lagi untuk cek shortcut ukuran (sudah ditolak), tapi untuk cek shortcut BACKGROUND (Flag 4: Recyclable 38,8% plain bg vs Electronic 15,2%) yang belum tersentuh oleh analisis subpopulasi ini. Ini satu-satunya gate tersisa sebelum Fase 3 (Class-Balanced Loss, CutMix-kondisional) dibuka.
+- Blocker (if any)      : ✅ Tidak ada blocker teknis. Grad-CAM check adalah gate terakhir yang perlu dilewati, bukan blocker darurat.
 
 ## DATASET
 - Train file    : `train/` folder — 26.527 images (rows), 3 classes (subfolders)
@@ -215,15 +213,15 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - External Metadata: Dilarang oleh aturan kompetisi.
 
 ## EXPERIMENT LOG SUMMARY
-- Anchor model (Slot 1) : [model type] — CV: [score] — LB: [score] — Delta: [delta]
-- Anchor model (Slot 2) : [model type] — CV: [score] — LB: [score] — Delta: [delta]
-- Best CV so far        : [score] — exp_id: [id]
-- Best LB so far        : [score] — exp_id: [id]
+- Anchor model (Slot 1) : ConvNeXt V2-Tiny — CV: 0.9823 (macro F1, fold 0) — LB: belum submit — Delta: N/A
+- Anchor model (Slot 2) : [belum ada — EfficientNetV2-S menyusul]
+- Best CV so far        : 0.9823 — exp_id: exp001
+- Best LB so far        : belum ada submission
 
 **Recent experiments (last 5):**
 | exp_id | Stage | Model | CV | LB | Delta | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| - | - | - | - | - | - | Belum ada training |
+| exp001 | Fase 1 Baseline | ConvNeXt V2-Tiny, plain CE, no aug/EMA/CutMix, fold 0, 15 epoch | 0.9823 (macro F1) | - | - | F1 Electronic=0.994 (tertinggi). **Subpop check (icon vs natural) DONE — gap 0.0009, hipotesis shortcut ukuran DITOLAK.** Grad-CAM masih wajib untuk cek shortcut background (Flag 4). Checkpoint: `model_s9_baseline_cv0.9823.pt` |
 
 ## VALIDATION STRATEGY — LOCKED per 2 Juli 2026
 - CV method     : **StratifiedGroupKFold** (menggantikan StratifiedKFold biasa)
@@ -246,8 +244,20 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 ## MODELING STRATEGY (LOCKED per Sonnet Revision, 2 Juli 2026)
 
 - **Anchor Model (wajib)**: **ConvNeXt V2-Tiny** (28.6M params), pre-trained ImageNet-21K. Dipilih karena paling forgiving untuk hardware tak-terkonfirmasi & budget 3 submission.
-- **Partner Ensemble (kondisional, hanya Submission 3)**: **EfficientNetV2-S** (21.5M params) — hanya jika CV ensemble terbukti unggul dari single model.
-- **Model Ditolak**: ConvNeXt V2-Base / EfficientNetV2-M / Swin V2-Tiny sebagai ANCHOR (terlalu berat/rewel untuk fase awal). Hanya dipertimbangkan sebagai kandidat sekunder jika baseline ConvNeXt Tiny solid & hardware memadai.
+- **Partner Model (wajib, bukan lagi kondisional — REVISI 4 Juli 2026)**: **EfficientNetV2-S** (21.5M params) — dilatih dengan CV setup identik (fold & seed sama) untuk comparison eksplisit DAN sebagai komponen ensemble wajib (lihat ENSEMBLE STRATEGY di bawah).
+- **Model Ditolak**: ConvNeXt V2-Base / EfficientNetV2-M / Swin V2-Tiny sebagai ANCHOR (terlalu berat/rewel untuk fase awal). ResNet50 sebagai "classic baseline" tambahan DITOLAK untuk re-training — cukup dirujuk dari literatur (nilai tambah marginal rendah dibanding compute cost). Model 3+ hanya dipertimbangkan sebagai kandidat sekunder jika baseline+partner solid & hardware memadai (RTX 4090 approved).
+
+### ENSEMBLE STRATEGY (REVISI 4 Juli 2026 — dari kondisional jadi minimal-wajib)
+**Alasan revisi**: Perlu jawaban defensible untuk pertanyaan "kenapa tidak ensemble" tanpa memerlukan compute besar. Strategi dipecah 2 layer:
+
+| Layer | Komposisi | Compute Cost | Status |
+|---|---|---|---|
+| **Layer 1 — K-fold ensembling** | 5 model dari 5-fold CV, arsitektur SAMA (ConvNeXt V2-Tiny) | Hampir gratis — model sudah ada dari CV, cuma tambahan inference | **WAJIB, minimum viable ensemble** |
+| **Layer 2 — Multi-architecture ensemble** | 5 fold ConvNeXt V2-Tiny + 5 fold EfficientNetV2-S = 10 model total | Tinggi — butuh training EfficientNetV2-S penuh | Diaktifkan **jika**: (a) CV score kedua arsitektur sebanding, DAN (b) OOF prediction correlation rendah (dicek setelah keduanya selesai training) |
+
+- **Bobot ensemble**: **Simple average (equal weight)** dulu. Weighted/OOF-based weighting adalah eksplorasi **opsional** di Fase 5, hanya kalau ada waktu & compute sisa.
+- **Validasi**: Murni CV lokal (StratifiedGroupKFold) — TIDAK perlu submit ke leaderboard untuk evaluasi eksperimen ensemble. Submission budget (3x) dijaga hanya untuk kandidat final.
+- **Rationale "sama-sama kuat" untuk ensemble**: Kondisi ideal ensemble adalah performa sebanding + error tidak berkorelasi tinggi (beda arsitektur → cenderung salah di kasus berbeda). Kalau satu model jauh lebih kuat, ensemble berisiko menurunkan performa (model lemah menarik turun prediksi model kuat).
 
 ### Resep Training (Locked)
 | Komponen | Keputusan Final |
@@ -263,6 +273,18 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - **Wajib**: RandAugment (ringan–sedang) + Horizontal Flip + Color Jitter terbatas (brightness/warna adalah sinyal diskriminatif, jangan dirusak).
 - **CutMix**: **TIDAK AKTIF di baseline.** Hanya diaktifkan jika hasil **Grad-CAM** pasca-baseline mengonfirmasi model belajar shortcut background (Recyclable putih / Electronic square).
 - **Mixup**: Diuji TERPISAH setelah baseline+CutMix. Drop jika F1 Electronic turun.
+
+**Sensitivity Analysis / Ablation Table (WAJIB, REVISI 4 Juli 2026):**
+Setiap komponen augmentasi di atas WAJIB dicatat sebagai baris terpisah di tabel ablation berikut, dengan CV score (fold & seed identik) sebagai bukti kuantitatif kontribusi tiap komponen — bukan cuma keputusan on/off tanpa data:
+
+| Konfigurasi | Macro F1 (CV) | F1 Electronic (CV) | Delta vs Baseline | Keputusan |
+|---|---|---|---|---|
+| Baseline (no aug, plain CE) | TBD | TBD | - | exp001 |
+| +RandAugment+Flip+ColorJitter | TBD | TBD | TBD | TBD |
+| +CutMix (kondisional Grad-CAM) | TBD | TBD | TBD | TBD |
+| +Mixup | TBD | TBD | TBD | TBD |
+
+Diisi progresif seiring Fase 2-4 berjalan. Setiap baris WAJIB pakai StratifiedGroupKFold identik supaya perbandingan apple-to-apple.
 
 ### Evaluasi Model Selection
 - Kriteria utama: **Macro F1 rata-rata 5-fold CV.**
@@ -296,9 +318,14 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - [x] **Ababil** — StratifiedGroupKFold split: SELESAI. `train_master_with_folds.csv` tersimpan. 5 fold (5285-5286 tiap fold), group integrity PASSED (tidak ada grup terbelah), class balance deviation maksimum 0.02pp dari global ratio (Recyclable 37.83%, Electronic 14.98%, Organic 47.19%) — jauh di bawah threshold 2pp, tidak ada tindakan lanjutan diperlukan.
 - [x] **Ababil** — Test loader: SELESAI. `submission.csv` dipakai sebagai source of truth urutan ID, semua 1458 file test tervalidasi ada di disk & urutan match.
 - [x] **Ababil** — Image mode converter (`load_image_as_rgb`): SELESAI & tervalidasi untuk P/RGBA/L (lihat update di DATASET section untuk angka detail).
-- [ ] **Ababil** — bangun PyTorch Dataset/DataLoader class yang menggabungkan: `train_master_with_folds.csv` (untuk train/val split per fold) + `load_image_as_rgb()` converter + resize strategy (minimal 224×224, perhatikan outlier `614.jpg` 3856×3856 — hindari naive upscale/downscale ekstrem tanpa pertimbangan)
-- [ ] **Ababil** jalankan **Baseline Training ConvNeXt V2-Tiny** (resolusi 224, tanpa CutMix/Mixup, tanpa Class-Balanced Loss dulu) sebagai titik referensi bersih.
-- [ ] **Ababil/Jeremy** jalankan **Grad-CAM check** segera setelah baseline convergen — hasilnya menentukan apakah CutMix masuk roadmap atau tidak.
+- [x] **Ababil** — PyTorch Dataset/DataLoader class: SELESAI & tervalidasi penuh (Cell 28-31). Batch shape [64,3,224,224], label unique [0,1,2], test filename order match submission.csv persis.
+- [x] **Ababil** — Environment porting Local ↔ Kaggle: SELESAI. Notebook sekarang jalan di kedua environment dengan pola `data_dir` (read-only)/`output_dir` (write) konsisten.
+- [x] **Ababil** — Model architecture setup: SELESAI. ConvNeXt V2-Tiny (timm) loaded, discriminative LR split (backbone 1e-5 / head 1e-4) berhasil, terverifikasi jalan di Tesla T4.
+- [x] **Ababil** — Baseline training loop: SELESAI (exp001). Plain CrossEntropyLoss, cosine+warmup, AMP (`torch.amp.GradScaler('cuda')` — fixed dari deprecated call), tanpa EMA. Best val_macro_f1=0.9823 (epoch 10). Checkpoint tersimpan.
+- [x] **⚠️ Ababil — Investigasi kecurigaan shortcut learning (subpopulation check)**: SELESAI. Recall Icon(150×150)=0.9927, Natural=0.9918, gap=0.0009. **Hipotesis shortcut ukuran/format DITOLAK** — model generalize sama baik di kedua subpopulasi Electronic.
+- [ ] **Ababil/Jeremy — Grad-CAM check (SATU-SATUNYA GATE TERSISA sebelum Fase 3)**: belum dijalankan. Fokus sekarang bukan ukuran gambar (sudah ditolak), tapi cek shortcut BACKGROUND (Flag 4: Recyclable 38,8% plain bg vs Electronic 15,2% plain bg) — apakah model perhatian ke objek atau ke area background/tepi gambar. Hasilnya menentukan aktivasi CutMix untuk seluruh fase berikutnya.
+- [ ] **Ababil** jalankan **Baseline Training ConvNeXt V2-Tiny** (resolusi 224, tanpa CutMix/Mixup, tanpa Class-Balanced Loss dulu) sebagai titik referensi bersih. **[SELESAI — lihat exp001 di atas, tapi hasil masih perlu divalidasi sebelum dianggap "clean baseline"]**
+- [ ] **Ababil/Jeremy** jalankan **Grad-CAM check** segera setelah baseline convergen — hasilnya menentukan apakah CutMix masuk roadmap atau tidak. **[STATUS: NOW BLOCKING — baseline sudah convergen, Grad-CAM harus jalan sebelum keputusan lain apapun]**
 - [ ] **Ababil** implementasikan **Class-Balanced Loss** + Weighted Random Sampler di eksperimen kedua (setelah baseline & Grad-CAM selesai).
 - [ ] **Ababil** konfirmasi **spesifikasi hardware riil** (VRAM, kecepatan training per epoch) SEBELUM menaikkan resolusi ke ≥288px.
 - [ ] **Ababil** kirim ringkasan EDA final + keputusan strategi ke Vierico untuk Checkpoint B2
@@ -342,6 +369,19 @@ Saat ganti akun Claude (limit habis), lakukan urutan ini:
 ## CATATAN BEBAS
 Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 
+- **[4 Juli 2026] [Ababil]:** **REVISI STRATEGI — Ensemble & Model Comparison.** Latar belakang: perlu jawaban defensible untuk pertanyaan "kenapa tidak ensemble" mengingat compute terbatas (T4 5-fold CV single model estimasi 10.5-16.5 jam, vs RTX 4090 ~2.5-4.2 jam — masih pending approval dosen). Keputusan:
+  1. **Ensemble** berubah dari kondisional ("hanya jika CV membuktikan unggul") jadi **minimal-wajib** 2 layer: (a) K-fold ensembling (5 model ConvNeXt dari 5-fold CV, hampir gratis) — WAJIB; (b) Multi-architecture ensemble (5 ConvNeXt + 5 EfficientNetV2-S = 10 model) — diaktifkan jika CV sebanding & OOF correlation rendah.
+  2. Bobot ensemble: **simple average dulu**, weighted/OOF-based jadi eksplorasi opsional Fase 5 kalau ada compute/waktu sisa.
+  3. **Model comparison** dipatok di 2 model (ConvNeXt V2-Tiny vs EfficientNetV2-S) — usulan tambah ResNet50 sebagai "classic baseline" DITOLAK (nilai tambah marginal rendah vs compute cost, hasil sudah predictable kalah dari arsitektur modern; cukup dirujuk dari literatur di laporan).
+  4. **Sensitivity analysis** diformalkan jadi ablation table augmentasi eksplisit (baseline → +RandAugment → +CutMix → +Mixup), masing-masing dengan CV score tercatat — bukan cuma keputusan on/off tanpa data kuantitatif.
+  5. Validasi semua eksperimen di atas **murni CV lokal**, tidak perlu submit ke leaderboard — submission budget (3x) dijaga untuk kandidat final saja.
+  6. Compute strategy: tetap Kaggle untuk sekarang, RTX 4090 masih pending approval dosen — EfficientNetV2-S training dijadwalkan setelah baseline ConvNeXt selesai & sesuai kuota yang tersisa.
+- **[4 Juli 2026] [Ababil]:** **Baseline training (exp001) SELESAI.** ConvNeXt V2-Tiny, plain CE Loss, 15 epoch, fold 0, di Kaggle T4 (~227s/epoch, total training ~57 menit). Best val_macro_f1=0.9823 di epoch 10 (checkpoint tersimpan: `model_s9_baseline_cv0.9823.pt`). **Kecurigaan awal**: F1 Electronic=0.994 — tertinggi dari 3 kelas, padahal Electronic adalah kelas minoritas (14,9%) yang menurut Flag 1 seharusnya paling sulit/rendah F1-nya. Ini sempat dikira konsisten dengan hipotesis H3 & Flag 4/5 (Electronic 68,8% berupa icon 150×150 seragam) — dugaan model belajar shortcut ukuran/format gambar. Train-test leakage (Flag 3) dan within-class dupe leakage (Flag 6) sudah dikonfirmasi TIDAK jadi penyebab dari awal — sanity check Cell 30 semua PASSED (train size 21.143/val 5.286 sesuai ekspektasi, group integrity PASSED, class balance deviation max 0.0005).
+- **[4 Juli 2026] [Ababil]:** **Subpopulation sensitivity check (icon vs natural) SELESAI — hipotesis shortcut ukuran DITOLAK.** Hasil: Total Electronic di val=793 (69,2% icon/30,8% natural — proporsi konsisten dengan EDA Jeremy 68,8%/31,2%). Recall Icon=0.9927 (545/549), Recall Natural=0.9918 (242/244), gap=0.0009 — nyaris nol. **Koreksi dari kecurigaan awal**: F1 Electronic tinggi TIDAK terbukti berasal dari shortcut ukuran icon — model generalize sama baik di kedua subpopulasi. F1 tinggi kemungkinan genuine (elektronik punya sinyal visual distinctive: brightness rendah 142 vs Recyclable 182, warna R≈G≈B metalik vs Organic R-dominan). **Namun** ini TIDAK menyingkirkan kemungkinan shortcut BACKGROUND (Flag 4) yang tidak tercakup analisis ukuran gambar — Grad-CAM tetap wajib dijalankan sebagai gate terakhir Fase 1→2, fokus sekarang murni ke cek fokus spasial model (objek vs background), bukan lagi ukuran/format gambar.
+- **[3 Juli 2026] [Ababil]:** **Model architecture setup SELESAI.** ConvNeXt V2-Tiny (`convnextv2_tiny.fcmae_ft_in22k_in1k` via timm) berhasil di-load & jalan di Kaggle Tesla T4 (15.6GB VRAM). Discriminative LR split backbone (27,86M params, LR=1e-5) vs head `model.head.fc` (3.843 params, LR=1e-4) berhasil. Keputusan: **baseline pertama pakai plain CrossEntropyLoss** (bukan Class-Balanced Loss) — sesuai roadmap Fase 1 (baseline polos dulu, Class-Balanced baru masuk Fase 3). Minor: `torch.cuda.amp.GradScaler` deprecated di PyTorch 2.10+, ganti ke `torch.amp.GradScaler('cuda')`.
+- **[3 Juli 2026] [Ababil]:** **Update rencana hardware — GANTIKAN rencana lama.** Development/testing SEMENTARA pakai **Kaggle (Tesla T4, 15.6GB)** karena belum masuk training berat & belum ada konfirmasi hardware final dari dosen. Kemungkinan pindah ke **RTX 4090** (bukan lagi 4080S/5070/5080/5090 yang dibahas sebelumnya) — masih belum fix, tunggu konfirmasi dosen. Opsi GPU Vast.ai lama di section COMPUTING RESOURCES sudah di-update untuk reflect ini.
+- **[3 Juli 2026] [Ababil]:** **Environment porting Local → Kaggle SELESAI.** Notebook berhasil dijalankan di Kaggle dengan struktur dataset nested (`/kaggle/input/datasets/<username>/<slug>/BDC2026/`) — auto-detect `data_dir` pakai pencarian generic (cari folder yang punya `train/`+`test/`+`submission.csv` sekaligus, tidak hardcode path). 3 CSV exclude-list (`train_test_overlap.csv`, `train_duplicate_groups.csv`, `near_duplicate_candidates.csv`) di-upload sebagai dataset terpisah (`dupe-exclude-satria-data-2026`) dan dihitung ULANG di Kaggle (bukan pakai hasil lokal) — keputusan: pakai hasil hitung ulang Kaggle sebagai source of truth baru. **Pelajaran penting**: sempat beberapa kali OSError (`Read-only file system`) karena residual `data_dir` dipakai untuk operasi `.to_csv()` — Kaggle `/kaggle/input/` READ-ONLY, semua tulis wajib ke `output_dir` (`/kaggle/working/`). Pola yang sekarang dipegang: `data_dir` = read-only (baca gambar/CSV asal), `output_dir` = write (semua hasil pipeline). Fixed di Cell 15 dan Cell 20 (README numbering Kaggle, bisa beda dari notebook lokal asli).
+- **[3 Juli 2026] [Ababil]:** DataLoader Fase 1 — SELESAI TOTAL & tervalidasi end-to-end (Cell 31 sanity check). Batch shape `[64,3,224,224]`, dtype float32, label unique `[0,1,2]`, pixel range post-normalize -2.12 to 2.64 (wajar ImageNet stats), test filename order `('1.jpg','2.jpg','3.jpg','4.jpg','5.jpg')` — **match persis urutan submission.csv**, bukan urutan sistem file. Train/Val split fold 0: 21.143/5.286, class balance konsisten (~37,8%/15,0%/47,2% di kedua split).
 - **[3 Juli 2026] [Ababil]:** Environment fixed (numpy/scipy/sklearn version mismatch resolved). StratifiedGroupKFold split berjalan sempurna — class balance deviation maksimum hanya 0.02pp, jauh lebih baik dari perkiraan awal (khawatir grup Electronic yang besar bikin timpang, ternyata tidak terjadi).
 - **[3 Juli 2026] [Ababil]:** Test loader & image mode converter selesai. **Koreksi penting**: full scan menunjukkan non-RGB train file jauh lebih banyak dari estimasi EDA lama (312 vs ~19) — didominasi Palette mode (293 file), bukan cuma RGBA. Test set juga punya 5 file Palette. Semua berhasil dikonversi aman via composite-to-white (RGBA) / standard convert (P, L). Ditemukan outlier baru: `614.jpg` grayscale resolusi 3856×3856 — jauh di atas mayoritas, perlu perhatian khusus di resize strategy.
 - **[3 Juli 2026] [Ababil]:** DataLoader Fase 1 — bagian group-assignment SELESAI dan tervalidasi (`train_master_with_groups.csv`). Ditemukan 2 pasang near-duplicate baru di Electronic (`627(1).jpeg`/`627.jpeg`, `629(1).jpeg`/`629.jpeg`) dari `near_duplicate_candidates.csv` — bukan exact MD5, tapi disepakati treatment: gabung jadi 1 duplicate_group_id sama seperti exact-dup lain (aman & murah, tidak perlu delegasi Jeremy). Sudah masuk ke group logic.
