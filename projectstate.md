@@ -17,7 +17,6 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
   - **Vast.ai** (bayar per jam, fleksibel) — direkomendasikan.
   - **Kaggle** (gratis, tapi terbatas 30 jam/minggu & session timeout 9 jam).
 - **GPU options (Vast.ai)**: 
-  - RTX 5090 32GB
   - RTX 4080 Super 16GB
   - RTX 5070 16GB
   - RTX 5080 16GB
@@ -364,3 +363,74 @@ Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
   - Semua statistik (brightness, warna, dimensi, aspect ratio, foreground ratio, background variance, orientasi) sudah dihitung dan tersedia di notebook eksplorasi.
   - File RGBA di Electronic: 2 file dengan alpha channel — perlu di-handle saat loading (konversi ke RGB).
   - File mode P (palette/indexed): total 17 file — perlu di-handle saat loading (konversi ke RGB).
+
+---
+
+## SOURCE CODE REFERENCE (Notebook: `satria_data_bda.ipynb` — nomor cell asli notebook)
+*Ini index/kamus, BUKAN copy-paste kode lengkap. Untuk implementasi detail, cek notebook langsung. Update section ini hanya kalau ada perubahan struktur besar (cell baru/dihapus/nama variabel berubah) — jangan sinkronkan tiap kali edit kecil, supaya tidak jadi beban maintenance ganda.*
+
+### Peta Cell → Fungsi (ringkas)
+| Cell | Fungsi | Kategori |
+|---|---|---|
+| 0 | Setup `data_dir`, `train_dir`, `test_dir`, `submission_path` — auto-detect folder root project | Setup |
+| 1 | `print_tree()`, `summarize_structure()` — utilitas print struktur folder | Utility |
+| 2 | `find_corrupt_images()` — scan corrupt file train & test (hasil: 0 corrupt) | EDA |
+| 3 | `compute_file_hash()` (MD5, chunked) — dasar deteksi train-test overlap (hasil: 97 file, lihat Flag 3) | EDA |
+| 4 | `sample_files_per_class()` — generate `sampled_files` (seed=42, 500/kelas) untuk Cell 5-9 | EDA (support) |
+| 5 | `show_sample_grid()` — visual grid sample per kelas | EDA |
+| 6 | `compute_background_complexity()` — variance 4 corner patch (30px) untuk estimasi kompleksitas background. Threshold=50 untuk flag `is_plain_bg`. Hasil: Recyclable 38,8% plain bg (tertinggi), Electronic 15,2%, Organic 17,0% — lihat Flag 4 | EDA |
+| 7-24 | EDA eksploratif lanjutan lainnya (dimension/aspect ratio, orientasi, within-class & cross-class dupe, Electronic subgroup 150×150 vs natural, dll). **Temuan & angka final ada di section `EXPLORATION REPORT STATUS (Jeremy)` di atas — TIDAK didobel di sini.** Detail cell-by-cell akan diisi menyusul jika diperlukan. | EDA |
+| 25 | `get_image_mode()` — audit mode gambar full-scan. Hasil final: 312 non-RGB train (293 P + 17 RGBA + 2 L), 5 non-RGB test (P) | Pipeline |
+| 26 | `load_image_as_rgb()` — loader robust P/RGBA/L → RGB (RGBA di-composite ke background putih) | Pipeline (fungsi kunci) |
+| 27 | Verifikasi `load_image_as_rgb()` di semua mode non-RGB (train & test) — semua PASSED | Pipeline (validasi) |
+| 28 | `WasteDataset` (class) — PyTorch Dataset, return (img, label) atau (img, filename) jika `is_test=True` | Pipeline (class kunci) |
+| 29 | `train_transform`, `eval_transform` — pipeline Albumentations/torchvision (RandAugment + HFlip + ColorJitter terbatas untuk train; deterministic untuk eval) | Pipeline |
+| 30 | Build `train_df`/`val_df` dari `train_master_with_folds.csv` (fold 0), buat `train_dataset`/`val_dataset`/`train_loader`/`val_loader` | Pipeline |
+| 31 | Sanity check batch shape/dtype/value range untuk train & test loader | Pipeline (validasi) |
+
+*(Cell 7-24 di README yang diupload berisi StratifiedGroupKFold split + test loader — ini sudah dieksekusi dan hasilnya tervalidasi, tapi di README numbering-nya beda dari notebook asli. Perlu diklarifikasi ulang nomor cell asli untuk bagian ini saat notebook di-refactor final.)*
+
+### Artifact Files (disimpan ke disk)
+| File | Dihasilkan di Cell (approx) | Isi |
+|---|---|---|
+| `train_master_with_groups.csv` | ~Cell 15-16 (area fold-building, perlu konfirmasi nomor asli) | Semua train file + label + `duplicate_group_id` + `exclude_from_cv`/`exclude_from_training` flags. 26.527 baris. |
+| `train_master_with_folds.csv` | ~Cell 18-19 (perlu konfirmasi nomor asli) | Sama seperti atas + kolom `fold` (0-4, -1 = excluded dari CV) |
+
+### Key Variables (Global, dipakai lintas cell)
+| Variabel | Tipe | Isi |
+|---|---|---|
+| `data_dir`, `train_dir`, `test_dir`, `submission_path` | Path | Root direktori project, auto-detect (Cell 0) |
+| `class_folders` | list | `["0_Recyclable", "1_Electronic", "2_Organic"]` |
+| `sampled_files` | dict | `{class: [file_paths]}`, seed=42, 500 sample/kelas — HANYA untuk EDA visual (Cell 5-9), TIDAK dipakai pipeline training |
+| `train_test_duplicates` | dict | `{train_path: test_path}` — 97 pasang exact-dup (Flag 3) |
+| `train_master` | DataFrame | Master train file list + label + img_mode + group/exclude flags, 26.527 baris |
+| `submission_df` | DataFrame | Test file list, kolom `id`/`filename`/`filepath`/`img_mode` — source of truth urutan test (1458 baris) |
+| `fold_df` | DataFrame | Load dari `train_master_with_folds.csv`, dipakai untuk build train/val split |
+| `train_df`, `val_df` | DataFrame | Subset `fold_df` untuk fold aktif (`FOLD_TO_VALIDATE`) |
+| `train_dataset`, `val_dataset`, `test_dataset` | WasteDataset | PyTorch Dataset instances |
+| `train_loader`, `val_loader`, `test_loader` | DataLoader | PyTorch DataLoader instances |
+
+### Key Functions/Classes
+| Nama | Cell | Fungsi |
+|---|---|---|
+| `compute_file_hash(file_path, chunk_size=8192)` | 3 | MD5 hash, chunked read (efisien untuk file besar) |
+| `sample_files_per_class(data_dir, class_folders, n_samples=500)` | 4 | Generate sample EDA per kelas, seeded |
+| `compute_background_complexity(img, patch_size=30)` | 6 | Rata-rata variance 4 corner patch — proxy kompleksitas background (low=plain/studio, high=natural) |
+| `get_image_mode(filepath)` | 25 | Return `img.mode` (RGB/P/RGBA/L), error-safe (return string error kalau corrupt) |
+| `load_image_as_rgb(filepath)` | 26 | **Fungsi kunci pipeline.** Convert P/RGBA/L → RGB aman. RGBA di-composite ke background putih (hindari halo hitam di pixel transparan) |
+| `WasteDataset(df, transform, is_test)` | 28 | **Class kunci pipeline.** Custom PyTorch Dataset |
+
+### Constants (Locked — jangan ubah tanpa approval)
+| Nama | Nilai | Cell | Alasan |
+|---|---|---|---|
+| `IMG_SIZE` | 224 | 29 | Baseline resolution, lock di `MODELING STRATEGY` |
+| `N_SPLITS` | 5 | (fold-building) | StratifiedGroupKFold, lock di `VALIDATION STRATEGY` |
+| `SEED` | 42 | multiple | Reproducibility (sampling EDA, fold split) |
+| `BATCH_SIZE` | 64 | 30 | ConvNeXt V2-Tiny @ 224px, baseline utk 16GB VRAM. **Catatan: kemungkinan upgrade ke RTX 5090 32GB — belum confirmed, JANGAN naikkan angka ini sampai hardware fix dikonfirmasi.** |
+| `NUM_WORKERS` | 4 | 30 | Sesuaikan ke 0 kalau ada masalah multiprocessing di Windows |
+| `FOLD_TO_VALIDATE` | 0 | 30 | Fold pertama dipakai untuk baseline sanity check |
+| `threshold` (bg_variance) | 50 | 6 | Ambang batas plain-vs-complex background — **kalibrasi manual** setelah inspeksi `describe()`, bukan angka baku/teruji statistik. Worth di-review lagi kalau threshold ini dipakai untuk keputusan modeling (saat ini hanya EDA deskriptif). |
+
+### 🔴 TODO — Belum lengkap, isi menyusul
+- [ ] Nomor cell asli untuk StratifiedGroupKFold split (Cell 7-24 di README ini numbering-nya kemungkinan tidak match notebook asli — perlu diklarifikasi ulang setelah refactor selesai)
+- [ ] Detail cell-by-cell untuk Cell 6-24 (EDA eksploratif) — akan diisi menyusul kalau perlu direferensikan langsung dari kode, saat ini cukup rujuk ke `EXPLORATION REPORT STATUS`
