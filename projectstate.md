@@ -9,8 +9,8 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - Metric                : Macro-averaged F1-Score
 - Submission budget     : 3 / 3 (SANGAT KRITIS! Maksimal 3 submission untuk SELURUH kompetisi)
 - Submissions used today: 0 / 3
-- Last updated          : 3 Juli 2026
-- Updated by            : Ababil (DataLoader implementation session)
+- Last updated          : 4 Juli 2026
+- Updated by             : Ababil (source code sync + relabel session)
 
 ## COMPUTING RESOURCES
 - **Status aktual (3 Juli 2026)**: Development/testing SEMENTARA di **Kaggle (Tesla T4, 15.6GB VRAM)** — dipakai karena belum masuk fase training berat & belum ada konfirmasi hardware final dari dosen. **Rencana pindah ke RTX 4090 (kemungkinan, belum fix)** setelah konfirmasi. Sebelumnya sempat dibahas opsi 4080S/5070/5080/5090 (Vast.ai) — itu SUPERSEDED, treat sebagai historical context saja, bukan rencana aktif.
@@ -386,6 +386,7 @@ Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 - **[4 Juli 2026] [Ababil]:** **KEPUTUSAN PENDING**: 4 file mislabel terkonfirmasi (R_3825, R_3733, O_7776, battery_61) — perlu keputusan exclude vs relabel sebelum training Fase 3 dimulai.
 - **[4 Juli 2026] [Ababil]:** **Relabel 4 file mislabel — SELESAI DIEKSEKUSI.** Keputusan: relabel manual (bukan exclude), karena hanya 4 file dan sudah diverifikasi visual langsung. R_3825.jpg: 0→1, R_3733.jpg: 0→1, O_7776.jpg: 2→1, battery_61.jpg: 1→0. Backup pre-relabel tersimpan: `train_master_with_folds_PRE_RELABEL_BACKUP.csv`. Distribusi kelas pasca-relabel nyaris tidak berubah (Recyclable 37,83%→37,83%, Electronic 14,97%→14,99%, Organic 47,18%→47,18%) — dampak signifikan tidak diharapkan dari 4 file, tapi tetap dicatat untuk audit trail. `train_master_with_folds.csv` (versi kerja/output) sudah ter-update; siap untuk training ulang.
 - **[4 Juli 2026] [Ababil]:** **CATATAN caption-like investigation**: 10/333 sample diverifikasi visual, semua benar (tidak ada mislabel tambahan ditemukan). Keputusan: 10-sample dianggap cukup representatif, TIDAK cek 333 file satu-satu — trade-off waktu vs kepastian marjinal disetujui secara sadar (bukan diabaikan begitu saja).
+- **[4 Juli 2026] [Ababil]:** **SOURCE CODE REFERENCE disinkronkan penuh** dari source code asli (35 cell: 0, 0b, 0c, 1-34, termasuk 32b) yang diupload Ababil — section sebelumnya berisi banyak nomor cell perkiraan/belum terkonfirmasi, sekarang akurat 1:1 dengan kode berjalan. Perubahan struktural penting: pipeline EDA+cleaning+modeling ternyata linear dalam satu notebook (bukan terpisah seperti draft lama), Grad-CAM+mislabel-cleaning masuk sebagai Cell 28-34 (bukan tahap terpisah di luar notebook). Lihat section SOURCE CODE REFERENCE di bawah untuk detail lengkap.
 - **[4 Juli 2026] [Ababil]:** **Grad-CAM diagnostic SELESAI — GATE FASE 1→2 CLEARED.** Total 24 sample dianalisis dalam 2 batch:
   - **Batch 1 (16 sample, semua prediksi benar)**: Recyclable plain-bg (5) + Recyclable complex-bg kontrol (3) + Electronic icon150 (5) + Electronic natural kontrol (3). Hasil: aktivasi konsisten fokus ke objek/fitur diskriminatif (teks, logo, badan objek), TIDAK ke background kosong. 1 sample agak menyebar ke area sekitar objek kecil (karet/gelang) tapi tidak signifikan.
   - **Batch 2 (10 sample, error case Electronic — 4 FP + 6 FN)**: SEMUA aktivasi tetap fokus ke objek, bahkan pada kasus salah prediksi. Error ternyata didominasi 2 sumber: (a) ambiguitas visual genuine (logam bisa Recyclable/Electronic), (b) **kandidat mislabel ground truth baru** — minimal 3-4 kasus terlihat sangat jelas salah label secara visual (2 gambar laptop dilabel Recyclable, 1 panel/tombol elektronik dilabel Organic, 1 foto botol-botol dilabel Electronic).
@@ -420,71 +421,129 @@ Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 
 ---
 
-## SOURCE CODE REFERENCE (Notebook: `satria_data_bda.ipynb` — nomor cell asli notebook)
-*Ini index/kamus, BUKAN copy-paste kode lengkap. Untuk implementasi detail, cek notebook langsung. Update section ini hanya kalau ada perubahan struktur besar (cell baru/dihapus/nama variabel berubah) — jangan sinkronkan tiap kali edit kecil, supaya tidak jadi beban maintenance ganda.*
+## SOURCE CODE REFERENCE (REVISI 4 Juli 2026 — sinkron dari source code asli yang diupload Ababil)
+*Ini index/kamus, BUKAN copy-paste kode lengkap. Numbering di bawah ini mengikuti KOMENTAR di dalam kode (`# Cell N`), bukan posisi cell fisik di notebook — beberapa cell (0b, 0c, 32b) adalah sisipan non-sekuensial. Update section ini kalau ada refactor besar lagi.*
 
-### Peta Cell → Fungsi (ringkas)
+### Peta Cell → Fungsi (akurat per 4 Juli 2026)
 | Cell | Fungsi | Kategori |
 |---|---|---|
-| 0 | Setup `data_dir`, `train_dir`, `test_dir`, `submission_path` — auto-detect folder root project | Setup |
-| 1 | `print_tree()`, `summarize_structure()` — utilitas print struktur folder | Utility |
-| 2 | `find_corrupt_images()` — scan corrupt file train & test (hasil: 0 corrupt) | EDA |
-| 3 | `compute_file_hash()` (MD5, chunked) — dasar deteksi train-test overlap (hasil: 97 file, lihat Flag 3) | EDA |
-| 4 | `sample_files_per_class()` — generate `sampled_files` (seed=42, 500/kelas) untuk Cell 5-9 | EDA (support) |
-| 5 | `show_sample_grid()` — visual grid sample per kelas | EDA |
-| 6 | `compute_background_complexity()` — variance 4 corner patch (30px) untuk estimasi kompleksitas background. Threshold=50 untuk flag `is_plain_bg`. Hasil: Recyclable 38,8% plain bg (tertinggi), Electronic 15,2%, Organic 17,0% — lihat Flag 4 | EDA |
-| 7-24 | EDA eksploratif lanjutan lainnya (dimension/aspect ratio, orientasi, within-class & cross-class dupe, Electronic subgroup 150×150 vs natural, dll). **Temuan & angka final ada di section `EXPLORATION REPORT STATUS (Jeremy)` di atas — TIDAK didobel di sini.** Detail cell-by-cell akan diisi menyusul jika diperlukan. | EDA |
-| 25 | `get_image_mode()` — audit mode gambar full-scan. Hasil final: 312 non-RGB train (293 P + 17 RGBA + 2 L), 5 non-RGB test (P) | Pipeline |
-| 26 | `load_image_as_rgb()` — loader robust P/RGBA/L → RGB (RGBA di-composite ke background putih) | Pipeline (fungsi kunci) |
-| 27 | Verifikasi `load_image_as_rgb()` di semua mode non-RGB (train & test) — semua PASSED | Pipeline (validasi) |
-| 28 | `WasteDataset` (class) — PyTorch Dataset, return (img, label) atau (img, filename) jika `is_test=True` | Pipeline (class kunci) |
-| 29 | `train_transform`, `eval_transform` — pipeline Albumentations/torchvision (RandAugment + HFlip + ColorJitter terbatas untuk train; deterministic untuk eval) | Pipeline |
-| 30 | Build `train_df`/`val_df` dari `train_master_with_folds.csv` (fold 0), buat `train_dataset`/`val_dataset`/`train_loader`/`val_loader` | Pipeline |
-| 31 | Sanity check batch shape/dtype/value range untuk train & test loader | Pipeline (validasi) |
+| 0 | Setup `data_dir`, `train_dir`, `test_dir`, `submission_path`, `output_dir` — auto-detect Kaggle vs Local | Setup |
+| 0b | Generate `train_test_overlap.csv`, `train_duplicate_groups.csv`, `near_duplicate_candidates.csv` via MD5 hashing (`compute_file_hash`, `hash_all`) + regex copy-pattern near-dup detection | EDA (data prep) |
+| 0c | Load 3 CSV dari Cell 0b ke `overlap_df`, `groups_df`, `near_dup_df` | Pipeline |
+| 1 | Build `train_master` (DataFrame dasar): scan `train_dir`, kolom `filename`/`filepath`/`label`/`label_folder` | Pipeline |
+| 2 | Merge exact duplicate `duplicate_group_id` ke `train_master` (assert group count match) | Pipeline |
+| 3 | Merge near-duplicate `duplicate_group_id` (offset `NEAR_DUP_GROUP_START=900000`) | Pipeline |
+| 4 | Flag `exclude_from_cv` (97 train-test overlap) & `exclude_from_training` (`MISLABEL_EXCLUDE = {"O_8873.jpg"}`) | Pipeline |
+| 5 | Validasi integritas `train_master` (assert count, no dup filename, cross-class group check) → save `train_master_with_groups.csv` | Pipeline (validasi) |
+| 6 | `sample_files_per_class()`, `show_sample_grid()` — visual grid sample per kelas (seed=42, n=500/kelas) → `sampled_files` | EDA |
+| 7 | `compute_background_complexity()` — variance 4-corner patch (30px), threshold=50 → `df_bg`, `is_plain_bg` | EDA |
+| 8 | Dimension/aspect ratio/orientation analysis → `df_dim` | EDA |
+| 9 | Electronic subgroup: 150×150 icon vs natural (pakai `df_dim`) | EDA |
+| 10 | Visual comparison Recyclable vs Organic | EDA |
+| 11 | Brightness & RGB channel mean per kelas → `df_brightness` | EDA |
+| 12 | **StratifiedGroupKFold split** (`N_SPLITS=5`, `SEED=42`) pada `cv_pool` (exclude cv+training flags) → kolom `fold` | Pipeline (KUNCI) |
+| 13 | Validasi fold: group integrity (no leakage), class balance deviation (<2pp), fold size | Pipeline (validasi) |
+| 14 | Merge `fold` ke `train_master` (excluded rows → fold=-1) → save `train_master_with_folds.csv` | Pipeline (KUNCI) |
+| 15 | Load `submission_df` dari `submission.csv`, build `filename`/`filepath` dari `id`, verify semua file ada | Pipeline |
+| 16 | `get_image_mode()` — audit mode gambar full-scan → 312 non-RGB train, 5 non-RGB test | Pipeline |
+| 17 | `load_image_as_rgb()` — loader robust P/RGBA/L → RGB (RGBA composite ke putih) | Pipeline (fungsi kunci) |
+| 18 | Verifikasi `load_image_as_rgb()` di semua mode non-RGB (train & test) | Pipeline (validasi) |
+| 19 | `WasteDataset` (class) — PyTorch Dataset | Pipeline (class kunci) |
+| 20 | `train_transform`, `eval_transform` (`IMG_SIZE=224`, RandAugment+HFlip+ColorJitter utk train) | Pipeline |
+| 21 | Build `train_df`/`val_df`/loaders dari `train_master_with_folds.csv` (`FOLD_TO_VALIDATE=0`, `BATCH_SIZE=64`, `NUM_WORKERS=4`) | Pipeline |
+| 22 | Sanity check batch shape/dtype/value range (train & test loader) | Pipeline (validasi) |
+| 23 | Install `timm`, import training utils (`torch.amp.GradScaler`/`autocast` — non-deprecated) | Setup |
+| 24 | Build model: `timm.create_model("convnextv2_tiny.fcmae_ft_in22k_in1k", pretrained=True, num_classes=3)` → `model`, `DEVICE` | Model |
+| 25 | Discriminative LR: `BACKBONE_LR=1e-5`, `HEAD_LR=1e-4`, `WEIGHT_DECAY=0.05` → `optimizer` (AdamW, 2 param groups) | Model |
+| 26 | Loss/scheduler/scaler: `criterion` (plain CE), `NUM_EPOCHS=15`, cosine+warmup (`WARMUP_STEPS_RATIO=0.075`) → `scheduler`, `scaler` | Model |
+| 27 | **Training loop** (dengan fallback checkpoint resume dari `/kaggle/input/datasets/*/phase0/*.pt` atau `output_dir`) → `history`, checkpoint `model_s9_baseline_cv{score}.pt`, `training_history_baseline.csv` | Model (KUNCI) |
+| 28 | Subpopulation sensitivity check (icon 150×150 vs natural) pada Electronic — hasil: gap 0.0009, hipotesis shortcut ukuran DITOLAK | Diagnostik |
+| 29 | Grad-CAM shortcut check (16 sample: plain/complex bg × icon/natural, dengan kontrol) → `gradcam_shortcut_check.png` | Diagnostik (KUNCI) |
+| 30 | Grad-CAM Electronic failure mode (10 sample: 4 FP + 6 FN) → `gradcam_electronic_errors.png`. Ditemukan: Recyclable↔Organic confusion 104 kasus (belum diinvestigasi) | Diagnostik |
+| 31 | Manual mislabel candidate verification (4 file, visual side-by-side) → `mislabel_verification_batch1.png` | Diagnostik/Cleaning |
+| 32 | `is_standard_pattern()`, `looks_like_caption()` — filename pattern analysis → `suspicious` (1039 non-standard, semua di Electronic) | Cleaning |
+| 32b | Debug regex match rate per class — konfirmasi 1039 non-standard BUKAN bug, murni karakteristik data (Electronic sumber campuran) | Cleaning (validasi) |
+| 33 | Caption-like candidate visual inspection (10/333 sample) → `caption_visual_check_sample.png`, `caption_like_candidates.csv` — hasil: semua benar, tidak ada mislabel tambahan | Cleaning |
+| 34 | **Relabel 4 file mislabel terkonfirmasi** (`RELABEL_MAP`) → overwrite `train_master_with_folds.csv` + backup `train_master_with_folds_PRE_RELABEL_BACKUP.csv` | Cleaning (KUNCI, SELESAI dieksekusi) |
 
-*(Cell 7-24 di README yang diupload berisi StratifiedGroupKFold split + test loader — ini sudah dieksekusi dan hasilnya tervalidasi, tapi di README numbering-nya beda dari notebook asli. Perlu diklarifikasi ulang nomor cell asli untuk bagian ini saat notebook di-refactor final.)*
-
-### Artifact Files (disimpan ke disk)
-| File | Dihasilkan di Cell (approx) | Isi |
+### Artifact Files (disimpan ke `output_dir`)
+| File | Dihasilkan di Cell | Isi |
 |---|---|---|
-| `train_master_with_groups.csv` | ~Cell 15-16 (area fold-building, perlu konfirmasi nomor asli) | Semua train file + label + `duplicate_group_id` + `exclude_from_cv`/`exclude_from_training` flags. 26.527 baris. |
-| `train_master_with_folds.csv` | ~Cell 18-19 (perlu konfirmasi nomor asli) | Sama seperti atas + kolom `fold` (0-4, -1 = excluded dari CV) |
+| `train_test_overlap.csv` | 0b | 97 pasang exact-dup train-test (MD5) |
+| `train_duplicate_groups.csv` | 0b | Exact duplicate groups dalam train |
+| `near_duplicate_candidates.csv` | 0b | Near-dup candidates dari pattern `file(1).jpg` |
+| `train_master_with_groups.csv` | 5 | Semua train file + label + `duplicate_group_id` + exclude flags. 26.527 baris |
+| `train_master_with_folds.csv` | 14 (awal) → **direlabel di Cell 34 (4 Juli 2026)** | Sama seperti atas + kolom `fold` (0-4, -1=excluded). **VERSI TERKINI sudah bersih dari 4 mislabel.** |
+| `train_master_with_folds_PRE_RELABEL_BACKUP.csv` | 34 | Backup sebelum relabel dieksekusi (untuk rollback kalau perlu) |
+| `model_s9_baseline_cv{score}.pt` | 27 | Checkpoint terbaik per val_macro_f1. exp001 (data lama): `cv0.9823`. Checkpoint fold0-conv dataset lama cuma sempat simpan `cv0.9397` (epoch 1) sebelum sesi terputus. |
+| `training_history_baseline.csv` | 27 | Full epoch history (train/val loss, F1 per kelas, LR, waktu) |
+| `gradcam_shortcut_check.png` | 29 | 16-sample Grad-CAM (kontrol shortcut) |
+| `gradcam_electronic_errors.png` | 30 | 10-sample Grad-CAM (FP/FN Electronic) |
+| `mislabel_verification_batch1.png` | 31 | 4-sample visual verification mislabel |
+| `caption_like_candidates.csv` | 33 | 333 file caption-like filename |
+| `caption_visual_check_sample.png` | 33 | 10-sample visual check caption-like |
 
 ### Key Variables (Global, dipakai lintas cell)
 | Variabel | Tipe | Isi |
 |---|---|---|
-| `data_dir`, `train_dir`, `test_dir`, `submission_path` | Path | Root direktori project, auto-detect (Cell 0) |
+| `data_dir`, `train_dir`, `test_dir`, `submission_path`, `output_dir` | Path | Root direktori project, auto-detect Kaggle/Local (Cell 0) |
+| `IS_KAGGLE` | bool | Flag environment |
 | `class_folders` | list | `["0_Recyclable", "1_Electronic", "2_Organic"]` |
-| `sampled_files` | dict | `{class: [file_paths]}`, seed=42, 500 sample/kelas — HANYA untuk EDA visual (Cell 5-9), TIDAK dipakai pipeline training |
-| `train_test_duplicates` | dict | `{train_path: test_path}` — 97 pasang exact-dup (Flag 3) |
-| `train_master` | DataFrame | Master train file list + label + img_mode + group/exclude flags, 26.527 baris |
-| `submission_df` | DataFrame | Test file list, kolom `id`/`filename`/`filepath`/`img_mode` — source of truth urutan test (1458 baris) |
-| `fold_df` | DataFrame | Load dari `train_master_with_folds.csv`, dipakai untuk build train/val split |
-| `train_df`, `val_df` | DataFrame | Subset `fold_df` untuk fold aktif (`FOLD_TO_VALIDATE`) |
+| `label_map` | dict | `{"0_Recyclable": 0, "1_Electronic": 1, "2_Organic": 2}` (Cell 1) |
+| `overlap_df`, `groups_df`, `near_dup_df` | DataFrame | Hasil Cell 0b/0c — dasar exclude flags |
+| `sampled_files` | dict | `{class: [file_paths]}`, seed=42, 500/kelas — HANYA EDA visual (Cell 6-11), TIDAK dipakai pipeline training |
+| `train_master` | DataFrame | Master train file list + label + group/exclude flags, 26.527 baris (Cell 1-5) |
+| `submission_df` | DataFrame | Test file list — source of truth urutan test (1458 baris, Cell 15) |
+| `fold_df` | DataFrame | Load dari `train_master_with_folds.csv` (Cell 21) — **REBUILD ULANG setelah relabel Cell 34** |
+| `train_df`, `val_df` | DataFrame | Subset `fold_df` untuk `FOLD_TO_VALIDATE` (Cell 21) |
 | `train_dataset`, `val_dataset`, `test_dataset` | WasteDataset | PyTorch Dataset instances |
-| `train_loader`, `val_loader`, `test_loader` | DataLoader | PyTorch DataLoader instances |
+| `train_loader`, `val_loader`, `test_loader` | DataLoader | PyTorch DataLoader instances (val/test WAJIB `shuffle=False`) |
+| `model` | timm model | ConvNeXt V2-Tiny, 3-class head (Cell 24) |
+| `optimizer`, `scheduler`, `scaler`, `criterion` | torch objects | Setup training (Cell 25-26) |
+| `history` | list of dict | Epoch-by-epoch metrics (Cell 27) |
+| `val_labels_np`, `val_preds_np`, `val_filepaths_all` | np.array/list | Hasil inference val set — dipakai lintas Cell 28-31 untuk diagnostik |
+| `cam` | GradCAM object | Instance Grad-CAM (Cell 29), reused di Cell 30 |
+| `suspicious`, `caption_subset` | DataFrame | Hasil filename pattern analysis (Cell 32-33) |
 
 ### Key Functions/Classes
 | Nama | Cell | Fungsi |
 |---|---|---|
-| `compute_file_hash(file_path, chunk_size=8192)` | 3 | MD5 hash, chunked read (efisien untuk file besar) |
-| `sample_files_per_class(data_dir, class_folders, n_samples=500)` | 4 | Generate sample EDA per kelas, seeded |
-| `compute_background_complexity(img, patch_size=30)` | 6 | Rata-rata variance 4 corner patch — proxy kompleksitas background (low=plain/studio, high=natural) |
-| `get_image_mode(filepath)` | 25 | Return `img.mode` (RGB/P/RGBA/L), error-safe (return string error kalau corrupt) |
-| `load_image_as_rgb(filepath)` | 26 | **Fungsi kunci pipeline.** Convert P/RGBA/L → RGB aman. RGBA di-composite ke background putih (hindari halo hitam di pixel transparan) |
-| `WasteDataset(df, transform, is_test)` | 28 | **Class kunci pipeline.** Custom PyTorch Dataset |
+| `compute_file_hash(file_path, chunk_size=8192)` | 0b | MD5 hash, chunked read |
+| `hash_all(root_dirs)` | 0b | Hash semua file di beberapa folder sekaligus |
+| `sample_files_per_class(train_dir, class_folders, n_samples=500)` | 6 | Generate sample EDA per kelas, seeded |
+| `compute_background_complexity(img, patch_size=30)` | 7 | Proxy kompleksitas background (4-corner variance) |
+| `get_image_mode(filepath)` | 16 | Return `img.mode`, error-safe |
+| `load_image_as_rgb(filepath)` | 17 | **Fungsi kunci pipeline.** Convert P/RGBA/L → RGB aman |
+| `WasteDataset(df, transform, is_test)` | 19 | **Class kunci pipeline.** Custom PyTorch Dataset |
+| `lr_lambda(current_step)` | 26 | Cosine+warmup LR schedule function |
+| `get_image_dims(filepath)` | 28 | Return `(width, height)` — dasar deteksi icon 150×150 |
+| `load_and_preprocess(filepath)` | 29 | Load+resize+normalize+tensor untuk Grad-CAM input |
+| `is_standard_pattern(filename)` | 32 | Regex check nama file standar (`R_####`, `O_####`, dll) |
+| `looks_like_caption(filename)` | 32 | Heuristik deteksi nama file berupa kalimat/caption |
+| `resolve_filepath(filename)` | 33 | Cari filepath asli by loop `class_folders` (robust, tidak asumsi struktur folder label) |
 
 ### Constants (Locked — jangan ubah tanpa approval)
 | Nama | Nilai | Cell | Alasan |
 |---|---|---|---|
-| `IMG_SIZE` | 224 | 29 | Baseline resolution, lock di `MODELING STRATEGY` |
-| `N_SPLITS` | 5 | (fold-building) | StratifiedGroupKFold, lock di `VALIDATION STRATEGY` |
-| `SEED` | 42 | multiple | Reproducibility (sampling EDA, fold split) |
-| `BATCH_SIZE` | 64 | 30 | ConvNeXt V2-Tiny @ 224px, baseline utk 16GB VRAM. **Catatan: kemungkinan upgrade ke RTX 5090 32GB — belum confirmed, JANGAN naikkan angka ini sampai hardware fix dikonfirmasi.** |
-| `NUM_WORKERS` | 4 | 30 | Sesuaikan ke 0 kalau ada masalah multiprocessing di Windows |
-| `FOLD_TO_VALIDATE` | 0 | 30 | Fold pertama dipakai untuk baseline sanity check |
-| `threshold` (bg_variance) | 50 | 6 | Ambang batas plain-vs-complex background — **kalibrasi manual** setelah inspeksi `describe()`, bukan angka baku/teruji statistik. Worth di-review lagi kalau threshold ini dipakai untuk keputusan modeling (saat ini hanya EDA deskriptif). |
+| `IMG_SIZE` | 224 | 20 | Baseline resolution, lock di `MODELING STRATEGY` |
+| `N_SPLITS` | 5 | 12 | StratifiedGroupKFold, lock di `VALIDATION STRATEGY` |
+| `SEED` | 42 | multiple | Reproducibility (sampling EDA, fold split, sampling diagnostik) |
+| `BATCH_SIZE` | 64 | 21 | ConvNeXt V2-Tiny @ 224px, baseline utk 16GB VRAM. **2080 Ti (11GB) kemungkinan perlu turun sedikit (48) — belum divalidasi langsung.** |
+| `NUM_WORKERS` | 4 | 21 | Sesuaikan kalau ada masalah multiprocessing |
+| `FOLD_TO_VALIDATE` | 0 | 21 | Fold pertama dipakai untuk baseline sanity check |
+| `NUM_EPOCHS` | 15 | 26 | Baseline sanity run |
+| `WARMUP_STEPS_RATIO` | 0.075 | 26 | 7,5% dari total steps, dalam range locked 5-10% |
+| `BACKBONE_LR` / `HEAD_LR` | 1e-5 / 1e-4 | 25 | Discriminative LR, backbone vs head |
+| `WEIGHT_DECAY` | 0.05 | 25 | AdamW, standar untuk ConvNeXt-family |
+| `threshold` (bg_variance) | 50 | 7 | Ambang batas plain-vs-complex background — kalibrasi manual, bukan angka baku |
+| `RELABEL_MAP` | 4 file (lihat Cell 34) | 34 | Mapping relabel mislabel terkonfirmasi — SUDAH DIEKSEKUSI, jangan jalankan ulang tanpa cek (idempotent tapi redundant) |
+
+### ⚠️ Catatan Penting Struktural
+- **`train_master_with_folds.csv` SEKARANG PUNYA 2 VERSI SECARA KONSEPTUAL**: versi asli (dipakai exp001, CV=0.9823) dan versi ter-relabel (Cell 34, 4 Juli 2026). File fisik di `output_dir` SUDAH di-overwrite ke versi bersih — kalau butuh versi lama, pakai `train_master_with_folds_PRE_RELABEL_BACKUP.csv`.
+- **Checkpoint path fallback di Cell 27 berubah** dari asumsi lama (`fold0-conv`) menjadi pencarian pola `/kaggle/input/datasets/*/phase0/*.pt` — sesuaikan pattern ini kalau nama dataset Kaggle kamu berubah lagi.
+- **Setelah relabel Cell 34, Cell 21 (DataLoader) WAJIB di-rerun** sebelum training ulang — `train_df`/`val_df`/`train_loader`/`val_loader` yang sudah di-load ke memori masih pakai label lama sampai di-reload.
+- Cell 27 (training loop) **exp001 CV=0.9823 tidak lagi representasi data terkini** — retrain dengan data bersih akan jadi **exp002**, dicatat terpisah di EXPERIMENT LOG SUMMARY begitu selesai.
 
 ### 🔴 TODO — Belum lengkap, isi menyusul
-- [ ] Nomor cell asli untuk StratifiedGroupKFold split (Cell 7-24 di README ini numbering-nya kemungkinan tidak match notebook asli — perlu diklarifikasi ulang setelah refactor selesai)
-- [ ] Detail cell-by-cell untuk Cell 6-24 (EDA eksploratif) — akan diisi menyusul kalau perlu direferensikan langsung dari kode, saat ini cukup rujuk ke `EXPLORATION REPORT STATUS`
+- [ ] Retrain exp002 (data bersih pasca-relabel) — belum dieksekusi, catat CV score begitu selesai
+- [ ] Investigasi Recyclable↔Organic confusion (104 kasus dari Cell 30) — ditemukan tapi belum dianalisis, prioritas lebih rendah dari Electronic tapi worth di-follow-up
