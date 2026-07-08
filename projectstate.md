@@ -9,8 +9,8 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - Metric                : Macro-averaged F1-Score
 - Submission budget     : 3 / 3 (SANGAT KRITIS! Maksimal 3 submission untuk SELURUH kompetisi)
 - Submissions used today: 0 / 3
-- Last updated          : 4 Juli 2026
-- Updated by             : Ababil (source code sync + relabel session)
+- Last updated          : 8 Juli 2026
+- Updated by             : Ababil (architecture comparison ConvNeXt V2-Tiny vs EfficientNetV2-S CLOSED — champion: ConvNeXt V2-Tiny)
 
 ## COMPUTING RESOURCES
 - **Status aktual (3 Juli 2026)**: Development/testing SEMENTARA di **Kaggle (Tesla T4, 15.6GB VRAM)** — dipakai karena belum masuk fase training berat & belum ada konfirmasi hardware final dari dosen. **Rencana pindah ke RTX 4090 (kemungkinan, belum fix)** setelah konfirmasi. Sebelumnya sempat dibahas opsi 4080S/5070/5080/5090 (Vast.ai) — itu SUPERSEDED, treat sebagai historical context saja, bukan rencana aktif.
@@ -30,10 +30,10 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - **Catatan Kritis untuk Ababil**: Dengan ~16GB VRAM (T4 atau RTX 16GB-class), **ConvNeXt V2-Tiny** (28.6M) aman dengan batch size 64 (AMP ON) — **tervalidasi jalan di Tesla T4**. **JANGAN coba ConvNeXt V2-Base** (88.7M) di awal — risikonya OOM atau training terlalu lambat untuk diiterasi. Base hanya dipertimbangkan jika waktu & VRAM berlebih setelah Fase 3 selesai, ATAU jika sudah pindah ke hardware lebih besar (RTX 4090 dsb.) dan dikonfirmasi aman.
 
 ## CURRENT STATUS
-- Active phase          : Fase 3 in-progress — TAPI ada gap metodologi yang perlu ditutup dulu (lihat Next Action)
-- Last completed stage  : 3 training run selesai: exp001 (data kotor, CV 0.9823), exp001-rerun (data kotor juga, CV 0.9827, checkpoint menimpa nama exp001), exp002 (CB-Loss+Sampler, DATA BERSIH, CV 0.9809).
-- Next action           : **⚠️ WAJIB jalankan exp003 dulu**: plain CE + data bersih (TANPA CB-Loss/Sampler) sebagai true clean baseline. Rebuild loader dari `train_master_with_folds.csv` (sudah direlabel), plain `nn.CrossEntropyLoss()` tanpa weight, `shuffle=True` biasa (bukan WeightedRandomSampler). Baru setelah itu, bandingkan CV exp003 vs exp002 secara valid (satu variabel beda: loss/sampler) untuk simpulkan apakah Class-Balanced Loss membantu atau tidak.
-- Blocker (if any)      : ✅ Tidak ada blocker teknis, cuma perlu 1 training run lagi (~40 menit) untuk clean baseline yang valid.
+- Active phase          : Fase 3 in-progress — architecture comparison ConvNeXt V2-Tiny vs EfficientNetV2-S **CLOSED** (8 Juli 2026), kembali ke roadmap Fase 3 utama berbasis ConvNeXt V2-Tiny.
+- Last completed stage  : 7 training run total. Champion arsitektur: **exp003 (ConvNeXt V2-Tiny, plain CE, data bersih, CV 0.9815)**. EfficientNetV2-S didiagnosis 3x (exp004, exp004b, exp004c — LR head/warmup, normalisasi+resolusi native) — semua gagal menutup gap performa (best CV 0.9390 vs 0.9815 ConvNeXt). Root cause pasti tidak terpecahkan sepenuhnya; dihentikan atas dasar ROI, bukan karena masalah selesai.
+- Next action           : **Architecture comparison ditutup — ConvNeXt V2-Tiny satu-satunya arsitektur aktif mulai sekarang.** Lanjut ke opsi roadmap Fase 3 yang tersisa (berbasis ConvNeXt V2-Tiny): EMA, Label Smoothing, atau training full 5-fold untuk K-fold ensemble Layer 1. **Belum diputuskan mana duluan — perlu keputusan berikutnya.**
+- Blocker (if any)      : ⚠️ Checkpoint file exp002 & exp003 (.pt) hilang dari sesi Kaggle — perlu diputuskan (re-train ulang atau cari Notebook Version lama) sebelum lanjut ke tahap yang butuh checkpoint tersebut (mis. ensemble/inference).
 
 ## DATASET
 - Train file    : `train/` folder — 26.527 images (rows), 3 classes (subfolders)
@@ -213,18 +213,32 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - External Metadata: Dilarang oleh aturan kompetisi.
 
 ## EXPERIMENT LOG SUMMARY
-- Anchor model (Slot 1) : ConvNeXt V2-Tiny — Best CV: 0.9827 (exp001-rerun, TAPI data masih kotor — lihat catatan) — LB: belum submit
-- Anchor model (Slot 2) : [belum ada — EfficientNetV2-S menyusul]
-- Best CV so far (data BERSIH, valid) : 0.9809 — exp_id: exp002 (CB-Loss+Sampler) — **catatan: belum ada pembanding clean-baseline yang valid, lihat exp003 pending**
-- Best LB so far        : belum ada submission
+- Anchor model (Slot 1) : ConvNeXt V2-Tiny — Best CV: **0.9815** (exp003, data BERSIH, plain CE) — LB: belum submit
+- Anchor model (Slot 2) : **DITUTUP.** EfficientNetV2-S dieksplorasi (exp004/4b/4c) tapi tidak pernah menutup gap performa vs ConvNeXt V2-Tiny — architecture comparison CLOSED 8 Juli 2026, ConvNeXt V2-Tiny jadi satu-satunya arsitektur aktif.
+- Best CV so far (data BERSIH, valid) : **0.9815** — exp_id: exp003 (plain CE, data bersih) — ✅ **champion arsitektur, basis semua eksperimen lanjutan**
+- Best LB so far        : belum ada submission (0/3)
 
-**Recent experiments (last 5):**
-| exp_id | Stage | Model | Data | CV | LB | Delta vs prior | Notes |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| exp001 | Fase 1 Baseline | ConvNeXt V2-Tiny, plain CE, no aug/EMA/CutMix, fold 0, 15 epoch | KOTOR (pre-relabel) | 0.9823 | - | - | F1 Electronic=0.994. Ini yang di-Grad-CAM, menemukan 4 mislabel. Checkpoint TERTIMPA oleh exp001-rerun (nama file sama). |
-| exp001-rerun | Fase 1 Baseline (re-run tidak sengaja) | ConvNeXt V2-Tiny, plain CE, identik exp001 | **KOTOR juga** (loader tidak di-reload pasca-relabel) | 0.9827 | - | +0.0004 vs exp001 (stokastisitas training, BUKAN efek relabel) | F1 Electronic=0.995. Checkpoint: `model_s9_baseline_cv0.9827.pt` |
-| exp002 | Fase 3 | ConvNeXt V2-Tiny, Class-Balanced Loss (beta=0.9999) + Weighted Random Sampler | **BERSIH** (pertama kali pakai data pasca-relabel) | 0.9809 | - | -0.0018 vs exp001-rerun (**TIDAK VALID dibandingkan — beda data DAN beda loss sekaligus**) | F1 Electronic=0.992 (turun dari kotor 0.995). Checkpoint: `model_exp002_cbloss_cv0.9809.pt`. Kesimpulan dampak CB-Loss DITUNDA sampai ada clean baseline pembanding. |
-| exp003 | Fase 3 (PENDING) | ConvNeXt V2-Tiny, plain CE, **data bersih** | BERSIH | **BELUM DIJALANKAN** | - | - | **WAJIB dijalankan** — true clean baseline untuk bandingkan validitas exp002 |
+**Recent experiments (last 7):**
+| exp_id | Stage | Model | Data | Resolusi | CV | LB | Delta vs prior | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| exp001 | Fase 1 Baseline | ConvNeXt V2-Tiny, plain CE, no aug/EMA/CutMix, fold 0, 15 epoch | KOTOR (pre-relabel) | 224 | 0.9823 | - | - | F1 Electronic=0.994. Ini yang di-Grad-CAM, menemukan 4 mislabel. Checkpoint TERTIMPA oleh exp001-rerun (nama file sama). |
+| exp001-rerun | Fase 1 Baseline (re-run tidak sengaja) | ConvNeXt V2-Tiny, plain CE, identik exp001 | **KOTOR juga** (loader tidak di-reload pasca-relabel) | 224 | 0.9827 | - | +0.0004 vs exp001 (stokastisitas training, BUKAN efek relabel) | F1 Electronic=0.995. Checkpoint: `model_s9_baseline_cv0.9827.pt` |
+| exp002 | Fase 3 | ConvNeXt V2-Tiny, Class-Balanced Loss (beta=0.9999) + Weighted Random Sampler | **BERSIH** (pertama kali pakai data pasca-relabel) | 224 | 0.9809 | - | -0.0018 vs exp001-rerun (**TIDAK VALID dibandingkan — beda data DAN beda loss sekaligus**) | F1 Electronic=0.992. Checkpoint: `model_exp002_cbloss_cv0.9809.pt`. **⚠️ Checkpoint file .pt sekarang hilang dari sesi Kaggle — belum diputuskan re-train atau cari Notebook Version lama.** |
+| exp003 | Fase 3 | ConvNeXt V2-Tiny, plain CE (TANPA CB-Loss/Sampler), **data bersih** | **BERSIH** | 224 | **0.9815** ✅ | - | +0.0006 vs exp002 (**VALID — satu variabel beda: loss/sampler**) | F1[Recy=0.972, Elec=0.995, Org=0.978]. Best epoch 14/15. **BEST — champion arsitektur, basis semua eksperimen lanjutan.** Checkpoint: `model_exp003_cleanbaseline_cv0.9815.pt`. **⚠️ Checkpoint file .pt sekarang hilang dari sesi Kaggle.** History: `training_history_exp003_cleanbaseline.csv`. |
+| exp004 | Fase 3 (architecture comparison) | EfficientNetV2-S, plain CE (LR asli) | BERSIH | 224 (❌ salah — bukan resolusi native) | 0.9368 | - | jauh di bawah exp003 | Diagnosis #1: resolusi 224 bukan native EfficientNetV2-S. Selesai, gagal. |
+| exp004b | Fase 3 (architecture comparison) | EfficientNetV2-S, plain CE (LR tuned/head+warmup) | BERSIH | 224 (❌ masih salah) | 0.6528* | - | jauh di bawah exp004 | *Baru 1 epoch, dihentikan lebih awal — LR tuning tidak menutup gap, malah lebih buruk di epoch awal. Diagnosis #2, gagal. |
+| exp004c | Fase 3 (architecture comparison) | EfficientNetV2-S, plain CE (LR asli, kembali ke config awal) | BERSIH | 300 (✅ native, fixed) | 0.9390 | - | masih jauh di bawah exp003 (-0.0425) | Diagnosis #3: normalisasi + resolusi native dikoreksi, tetap tidak menutup gap. **Architecture comparison ditutup atas dasar ROI setelah exp004c** — root cause pasti tidak terpecahkan sepenuhnya (kemungkinan backbone LR arsitektur-spesifik atau training recipe fundamental berbeda), bukan karena EfficientNetV2-S inheren buruk. |
+
+**Kesimpulan ablasi exp002 vs exp003 (VALID, apple-to-apple):**
+- Plain CE (exp003): CV=0.9815, F1 Electronic=0.9950
+- CB-Loss+Sampler (exp002): CV=0.9809, F1 Electronic=0.9919
+- **Verdict: CB-Loss+Sampler TIDAK memberi keuntungan** pada dataset ini (imbalance 3,2:1 tidak cukup ekstrem, Electronic sudah near-ceiling). Lanjutkan iterasi Fase 3 tanpa CB-Loss sebagai default.
+
+**Kesimpulan architecture comparison ConvNeXt V2-Tiny vs EfficientNetV2-S (CLOSED, 8 Juli 2026):**
+- Pemenang: **ConvNeXt V2-Tiny** (exp003, CV 0.9815) vs EfficientNetV2-S terbaik (exp004c, CV 0.9390) — gap 0.0425.
+- EfficientNetV2-S didiagnosis 3x (LR head/warmup di exp004b, normalisasi+resolusi native di exp004c) — semua gagal menutup gap. Root cause pasti **tidak terpecahkan sepenuhnya**; keputusan dihentikan atas dasar **ROI eksperimen lanjutan yang menurun tajam**, bukan karena masalah sudah selesai dianalisis.
+- **Untuk laporan akhir, dokumentasikan sebagai**: "EfficientNetV2-S dieksplorasi dengan 3 iterasi debugging sistematis (LR tuning, normalisasi, resolusi native); tetap underperform signifikan vs ConvNeXt V2-Tiny meski sudah dikoreksi ke pretrained config yang benar — kemungkinan root cause di luar scope komponen yang diuji (mis. backbone LR arsitektur-spesifik atau training recipe yang berbeda secara fundamental)." **Jangan** simpulkan "EfficientNetV2-S secara inheren buruk" — klaim itu tidak didukung evidence yang cukup.
+- **Dampak ke MODELING STRATEGY / ENSEMBLE STRATEGY**: Partner Model EfficientNetV2-S (wajib per revisi 4 Juli 2026) dan Layer 2 ensemble multi-arsitektur **tidak lagi applicable** dengan hasil ini — perlu direvisi/diputuskan ulang saat masuk Fase 5 (lihat catatan di bagian ENSEMBLE STRATEGY).
 
 ## VALIDATION STRATEGY — LOCKED per 2 Juli 2026
 - CV method     : **StratifiedGroupKFold** (menggantikan StratifiedKFold biasa)
@@ -256,7 +270,7 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 | Layer | Komposisi | Compute Cost | Status |
 |---|---|---|---|
 | **Layer 1 — K-fold ensembling** | 5 model dari 5-fold CV, arsitektur SAMA (ConvNeXt V2-Tiny) | Hampir gratis — model sudah ada dari CV, cuma tambahan inference | **WAJIB, minimum viable ensemble** |
-| **Layer 2 — Multi-architecture ensemble** | 5 fold ConvNeXt V2-Tiny + 5 fold EfficientNetV2-S = 10 model total | Tinggi — butuh training EfficientNetV2-S penuh | Diaktifkan **jika**: (a) CV score kedua arsitektur sebanding, DAN (b) OOF prediction correlation rendah (dicek setelah keduanya selesai training) |
+| **Layer 2 — Multi-architecture ensemble** | 5 fold ConvNeXt V2-Tiny + 5 fold EfficientNetV2-S = 10 model total | Tinggi — butuh training EfficientNetV2-S penuh | **❌ TIDAK APPLICABLE (8 Juli 2026)** — syarat (a) CV score sebanding GAGAL: EfficientNetV2-S terbaik (exp004c, CV 0.9390) tertinggal 0.0425 dari ConvNeXt V2-Tiny (exp003, CV 0.9815) setelah 3x diagnosis. Architecture comparison ditutup atas dasar ROI. Perlu keputusan ulang di Fase 5 apakah dicari arsitektur partner lain atau cukup Layer 1 saja. |
 
 - **Bobot ensemble**: **Simple average (equal weight)** dulu. Weighted/OOF-based weighting adalah eksplorasi **opsional** di Fase 5, hanya kalau ada waktu & compute sisa.
 - **Validasi**: Murni CV lokal (StratifiedGroupKFold) — TIDAK perlu submit ke leaderboard untuk evaluasi eksperimen ensemble. Submission budget (3x) dijaga hanya untuk kandidat final.
@@ -315,6 +329,7 @@ Diisi progresif seiring Fase 2-4 berjalan. Setiap baris WAJIB pakai StratifiedGr
 - [x] **Flag 7 (mislabel)**: Keputusan final = Exclude `O_8873.jpg`, keep `R_799.jpg`. **CLOSED.**
 - [x] **Flag 6 (within-class dupe)**: Keputusan final = Gunakan StratifiedGroupKFold, JANGAN exclude. **CLOSED.**
 - [x] **Strategi Modeling**: ConvNeXt V2-Tiny sebagai anchor, Class-Balanced Loss, CutMix kondisional. **CLOSED per Sonnet Revision.**
+- [x] **Architecture comparison ConvNeXt V2-Tiny vs EfficientNetV2-S**: Keputusan final = ConvNeXt V2-Tiny menang (CV 0.9815 vs 0.9390), EfficientNetV2-S dihentikan setelah 3x diagnosis (exp004/4b/4c) atas dasar ROI. **CLOSED 8 Juli 2026.** Lihat EXPERIMENT LOG SUMMARY untuk detail dan template dokumentasi laporan akhir.
 
 ### 🔴 HIGH — NEXT ACTIONS (Ababil)
 - [x] **Ababil** — Group ID assignment untuk StratifiedGroupKFold: SELESAI. `train_master_with_groups.csv` tersimpan (26.527 baris, 26.463 unique groups setelah exact-dup + 2 near-dup Electronic pairs `627(1)/627.jpeg` & `629(1)/629.jpeg` digabung manual). exclude_from_cv=97 (match), exclude_from_training=1 (`O_8873.jpg`, match). Semua assertion PASSED termasuk cross-class group check.
@@ -328,9 +343,11 @@ Diisi progresif seiring Fase 2-4 berjalan. Setiap baris WAJIB pakai StratifiedGr
 - [x] **⚠️ Ababil — Investigasi kecurigaan shortcut learning (subpopulation check)**: SELESAI. Recall Icon(150×150)=0.9927, Natural=0.9918, gap=0.0009. **Hipotesis shortcut ukuran/format DITOLAK** — model generalize sama baik di kedua subpopulasi Electronic.
 - [x] **Ababil/Jeremy — Grad-CAM check**: SELESAI. 24 sample (16 true-positive dengan kontrol plain-bg/complex-bg + icon/natural, 10 error case Electronic FP/FN). **Hasil: TIDAK ADA shortcut learning terdeteksi.** CutMix TIDAK diaktifkan.
 - [x] **🆕 Ababil — Verifikasi manual kandidat mislabel baru**: SELESAI. Semua 4 kandidat terkonfirmasi mislabel (2 laptop, 1 panel, 1 botol). Relabel dieksekusi.
-- [ ] **Ababil** — Reload DataLoader (Cell 30) dari `train_master_with_folds.csv` yang sudah direlabel, lalu **retrain baseline sebagai exp002** untuk dapat CV score dengan data bersih.
-- [ ] **Ababil** mulai **Fase 3 — Optimasi Electronic**: Class-Balanced Loss (effective number of samples) + Weighted Random Sampler, training ulang ConvNeXt V2-Tiny dengan setup ini (jadi exp003 setelah exp002 clean-data baseline selesai).
-- [ ] **Ababil** mulai training **EfficientNetV2-S** dengan CV setup identik (fold & seed sama) — untuk model comparison eksplisit + syarat teknis ensemble Layer 2 (lihat ENSEMBLE STRATEGY).
+- [x] **Ababil** — Reload DataLoader (Cell 30) dari `train_master_with_folds.csv` yang sudah direlabel, lalu retrain baseline sebagai exp002/exp003 untuk dapat CV score dengan data bersih. **SELESAI — exp003 (CV 0.9815) jadi champion.**
+- [x] **Ababil** mulai **Fase 3 — Optimasi Electronic** tahap loss/sampler: Class-Balanced Loss + Weighted Random Sampler (exp002) vs plain CE (exp003). **SELESAI — plain CE menang, CB-Loss tidak dipakai sebagai default.**
+- [x] **Ababil** training **EfficientNetV2-S** untuk model comparison eksplisit (exp004/4b/4c). **SELESAI & CLOSED 8 Juli 2026 — EfficientNetV2-S kalah signifikan, architecture comparison ditutup atas dasar ROI. Layer 2 ensemble multi-arsitektur jadi tidak applicable (lihat ENSEMBLE STRATEGY).**
+- [ ] **Ababil** — Putuskan nasib **checkpoint exp002 & exp003 yang hilang** dari sesi Kaggle: re-train ulang, atau cari Notebook Version lama di Kaggle. **Prioritas tinggi — blocking untuk tahap ensemble/inference berikutnya.**
+- [ ] **Ababil** lanjut **Fase 3 sisa roadmap (berbasis ConvNeXt V2-Tiny saja)** — pilih salah satu/urutan: EMA, Label Smoothing, atau training full 5-fold untuk K-fold ensemble Layer 1. **Keputusan arah berikutnya belum diambil.**
 - [ ] **Ababil** isi **Ablation Table** (baseline → +RandAugment → +CutMix → +Mixup) di MODELING STRATEGY seiring eksperimen berjalan — dengan catatan CutMix baris ini kemungkinan tetap "not activated" karena Grad-CAM sudah clear (kecuali ada perubahan bukti baru).
 - [ ] **Ababil** jalankan **Baseline Training ConvNeXt V2-Tiny** (resolusi 224, tanpa CutMix/Mixup, tanpa Class-Balanced Loss dulu) sebagai titik referensi bersih. **[SELESAI — lihat exp001 di atas, tapi hasil masih perlu divalidasi sebelum dianggap "clean baseline"]**
 - [ ] **Ababil/Jeremy** jalankan **Grad-CAM check** segera setelah baseline convergen — hasilnya menentukan apakah CutMix masuk roadmap atau tidak. **[STATUS: NOW BLOCKING — baseline sudah convergen, Grad-CAM harus jalan sebelum keputusan lain apapun]**
@@ -389,6 +406,7 @@ Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 - **[4 Juli 2026] [Ababil]:** **KEPUTUSAN PENDING**: 4 file mislabel terkonfirmasi (R_3825, R_3733, O_7776, battery_61) — perlu keputusan exclude vs relabel sebelum training Fase 3 dimulai.
 - **[4 Juli 2026] [Ababil]:** **Relabel 4 file mislabel — SELESAI DIEKSEKUSI.** Keputusan: relabel manual (bukan exclude), karena hanya 4 file dan sudah diverifikasi visual langsung. R_3825.jpg: 0→1, R_3733.jpg: 0→1, O_7776.jpg: 2→1, battery_61.jpg: 1→0. Backup pre-relabel tersimpan: `train_master_with_folds_PRE_RELABEL_BACKUP.csv`. Distribusi kelas pasca-relabel nyaris tidak berubah (Recyclable 37,83%→37,83%, Electronic 14,97%→14,99%, Organic 47,18%→47,18%) — dampak signifikan tidak diharapkan dari 4 file, tapi tetap dicatat untuk audit trail. `train_master_with_folds.csv` (versi kerja/output) sudah ter-update; siap untuk training ulang.
 - **[4 Juli 2026] [Ababil]:** **CATATAN caption-like investigation**: 10/333 sample diverifikasi visual, semua benar (tidak ada mislabel tambahan ditemukan). Keputusan: 10-sample dianggap cukup representatif, TIDAK cek 333 file satu-satu — trade-off waktu vs kepastian marjinal disetujui secara sadar (bukan diabaikan begitu saja).
+- **[8 Juli 2026] [Ababil]:** **exp003 (true clean baseline) SELESAI.** ConvNeXt V2-Tiny, plain CE, data bersih, 15 epoch, fold 0. Best val_macro_f1=**0.9815** di epoch 14. F1[Recy=0.9720, Elec=0.9950, Org=0.9776]. Training stabil: val loss plateau di ~0.074 setelah epoch 9, tidak ada tanda overfitting signifikan meski train_acc mencapai 0.9989 di epoch 15. Checkpoint: `model_exp003_cleanbaseline_cv0.9815.pt`. **Perbandingan valid exp002 vs exp003 (satu variabel beda)**: CB-Loss+Sampler (0.9809) vs plain CE (0.9815) → **CB-Loss TIDAK membantu** (+0.0006 untuk plain CE). Verdict: plain CE tetap jadi default untuk iterasi Fase 3 selanjutnya.
 - **[4 Juli 2026] [Ababil]:** **SOURCE CODE REFERENCE disinkronkan penuh** dari source code asli (35 cell: 0, 0b, 0c, 1-34, termasuk 32b) yang diupload Ababil — section sebelumnya berisi banyak nomor cell perkiraan/belum terkonfirmasi, sekarang akurat 1:1 dengan kode berjalan. Perubahan struktural penting: pipeline EDA+cleaning+modeling ternyata linear dalam satu notebook (bukan terpisah seperti draft lama), Grad-CAM+mislabel-cleaning masuk sebagai Cell 28-34 (bukan tahap terpisah di luar notebook). Lihat section SOURCE CODE REFERENCE di bawah untuk detail lengkap.
 - **[4 Juli 2026] [Ababil]:** **KOREKSI PENOMORAN EKSPERIMEN — penting untuk audit trail.** 3 training run sudah dilakukan, TERNYATA baru 1 yang pakai data bersih:
   1. **exp001** (training pertama): plain CE, **data KOTOR** (sebelum relabel Cell 34). CV macro F1=**0.9823**. Ini yang di-Grad-CAM & menemukan 4 mislabel.
@@ -467,6 +485,7 @@ Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 | 26 | Loss/scheduler/scaler: `criterion` (plain CE), `NUM_EPOCHS=15`, cosine+warmup (`WARMUP_STEPS_RATIO=0.075`) → `scheduler`, `scaler` | Model |
 | 27 | **Training loop** (dengan fallback checkpoint resume dari `/kaggle/input/datasets/*/phase0/*.pt` atau `output_dir`) → `history`, checkpoint `model_s9_baseline_cv{score}.pt`, `training_history_baseline.csv` | Model (KUNCI) |
 | 28 | Subpopulation sensitivity check (icon 150×150 vs natural) pada Electronic — hasil: gap 0.0009, hipotesis shortcut ukuran DITOLAK | Diagnostik |
+| 36b | **exp003 — true clean baseline**: plain CE + data bersih (TANPA CB-Loss/Sampler). Rebuild loader dari `train_master_with_folds.csv`, fresh model, identik setup exp002 kecuali loss & sampler. Best CV=0.9815 (epoch 14). Output: `model_exp003_cleanbaseline_cv0.9815.pt`, `training_history_exp003_cleanbaseline.csv` | Model (Fase 3) |
 | 29 | Grad-CAM shortcut check (16 sample: plain/complex bg × icon/natural, dengan kontrol) → `gradcam_shortcut_check.png` | Diagnostik (KUNCI) |
 | 30 | Grad-CAM Electronic failure mode (10 sample: 4 FP + 6 FN) → `gradcam_electronic_errors.png`. Ditemukan: Recyclable↔Organic confusion 104 kasus (belum diinvestigasi) | Diagnostik |
 | 31 | Manual mislabel candidate verification (4 file, visual side-by-side) → `mislabel_verification_batch1.png` | Diagnostik/Cleaning |
@@ -491,6 +510,8 @@ Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 | `mislabel_verification_batch1.png` | 31 | 4-sample visual verification mislabel |
 | `caption_like_candidates.csv` | 33 | 333 file caption-like filename |
 | `caption_visual_check_sample.png` | 33 | 10-sample visual check caption-like |
+| `model_exp003_cleanbaseline_cv0.9815.pt` | 36b | Checkpoint terbaik exp003 (plain CE, data bersih) — epoch 14, val_macro_f1=0.9815 |
+| `training_history_exp003_cleanbaseline.csv` | 36b | Full epoch history exp003 (15 epoch) |
 
 ### Key Variables (Global, dipakai lintas cell)
 | Variabel | Tipe | Isi |
@@ -554,5 +575,8 @@ Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 - Cell 27 (training loop) **exp001 CV=0.9823 tidak lagi representasi data terkini** — retrain dengan data bersih akan jadi **exp002**, dicatat terpisah di EXPERIMENT LOG SUMMARY begitu selesai.
 
 ### 🔴 TODO — Belum lengkap, isi menyusul
-- [ ] Retrain exp002 (data bersih pasca-relabel) — belum dieksekusi, catat CV score begitu selesai
+- [x] ~~Retrain exp003 (clean baseline, plain CE + data bersih) — **SELESAI 8 Juli 2026**, CV=0.9815~~
+- [x] ~~Architecture comparison ConvNeXt V2-Tiny vs EfficientNetV2-S (exp004/4b/4c) — **CLOSED 8 Juli 2026**, ConvNeXt V2-Tiny menang, dihentikan atas dasar ROI~~
 - [ ] Investigasi Recyclable↔Organic confusion (104 kasus dari Cell 30) — ditemukan tapi belum dianalisis, prioritas lebih rendah dari Electronic tapi worth di-follow-up
+- [ ] Putuskan nasib checkpoint exp002 & exp003 (.pt) yang hilang dari sesi Kaggle — re-train ulang atau cari Notebook Version lama
+- [ ] Putuskan arah lanjutan Fase 3 (berbasis ConvNeXt V2-Tiny): EMA vs Label Smoothing vs training full 5-fold K-fold ensemble Layer 1 — belum ada keputusan urutan
