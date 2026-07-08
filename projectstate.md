@@ -30,10 +30,10 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - **Catatan Kritis untuk Ababil**: Dengan ~16GB VRAM (T4 atau RTX 16GB-class), **ConvNeXt V2-Tiny** (28.6M) aman dengan batch size 64 (AMP ON) — **tervalidasi jalan di Tesla T4**. **JANGAN coba ConvNeXt V2-Base** (88.7M) di awal — risikonya OOM atau training terlalu lambat untuk diiterasi. Base hanya dipertimbangkan jika waktu & VRAM berlebih setelah Fase 3 selesai, ATAU jika sudah pindah ke hardware lebih besar (RTX 4090 dsb.) dan dikonfirmasi aman.
 
 ## CURRENT STATUS
-- Active phase          : Fase 1→2 gate CLEARED, mislabel cleanup SELESAI → siap masuk Fase 3 (Optimasi Electronic)
-- Last completed stage  : **Relabel 4 mislabel terkonfirmasi SELESAI dieksekusi** (R_3825, R_3733→Electronic; O_7776→Electronic; battery_61→Recyclable). `train_master_with_folds.csv` sudah bersih. Caption-like filename investigation (333 file) CLEAR — 10-sample check semua benar, tidak ada mislabel tambahan.
-- Next action           : **Retrain baseline dengan data bersih → exp002.** Reload Cell 30 (rebuild train_df/val_df/loaders dari fold_df yang sudah direlabel) → Cell 35 (loss/scheduler/scaler) → Cell 36 (training loop, fallback checkpoint kemungkinan tidak relevan lagi karena data berubah, kemungkinan besar clean retrain). Bandingkan CV score exp002 vs exp001 (0.9823) untuk audit dampak relabel. Setelah exp002 solid → mulai Fase 3 (Class-Balanced Loss + Weighted Sampler) dan training EfficientNetV2-S.
-- Blocker (if any)      : ✅ Tidak ada.
+- Active phase          : Fase 3 in-progress — TAPI ada gap metodologi yang perlu ditutup dulu (lihat Next Action)
+- Last completed stage  : 3 training run selesai: exp001 (data kotor, CV 0.9823), exp001-rerun (data kotor juga, CV 0.9827, checkpoint menimpa nama exp001), exp002 (CB-Loss+Sampler, DATA BERSIH, CV 0.9809).
+- Next action           : **⚠️ WAJIB jalankan exp003 dulu**: plain CE + data bersih (TANPA CB-Loss/Sampler) sebagai true clean baseline. Rebuild loader dari `train_master_with_folds.csv` (sudah direlabel), plain `nn.CrossEntropyLoss()` tanpa weight, `shuffle=True` biasa (bukan WeightedRandomSampler). Baru setelah itu, bandingkan CV exp003 vs exp002 secara valid (satu variabel beda: loss/sampler) untuk simpulkan apakah Class-Balanced Loss membantu atau tidak.
+- Blocker (if any)      : ✅ Tidak ada blocker teknis, cuma perlu 1 training run lagi (~40 menit) untuk clean baseline yang valid.
 
 ## DATASET
 - Train file    : `train/` folder — 26.527 images (rows), 3 classes (subfolders)
@@ -213,15 +213,18 @@ Saat ganti akun: paste AGENTS.md dulu, lalu paste file ini, lalu ketik "lanjutka
 - External Metadata: Dilarang oleh aturan kompetisi.
 
 ## EXPERIMENT LOG SUMMARY
-- Anchor model (Slot 1) : ConvNeXt V2-Tiny — CV: 0.9823 (macro F1, fold 0) — LB: belum submit — Delta: N/A
+- Anchor model (Slot 1) : ConvNeXt V2-Tiny — Best CV: 0.9827 (exp001-rerun, TAPI data masih kotor — lihat catatan) — LB: belum submit
 - Anchor model (Slot 2) : [belum ada — EfficientNetV2-S menyusul]
-- Best CV so far        : 0.9823 — exp_id: exp001
+- Best CV so far (data BERSIH, valid) : 0.9809 — exp_id: exp002 (CB-Loss+Sampler) — **catatan: belum ada pembanding clean-baseline yang valid, lihat exp003 pending**
 - Best LB so far        : belum ada submission
 
 **Recent experiments (last 5):**
-| exp_id | Stage | Model | CV | LB | Delta | Notes |
-| --- | --- | --- | --- | --- | --- | --- |
-| exp001 | Fase 1 Baseline | ConvNeXt V2-Tiny, plain CE, no aug/EMA/CutMix, fold 0, 15 epoch | 0.9823 (macro F1) | - | - | F1 Electronic=0.994 (tertinggi). **Subpop check (icon vs natural) DONE — gap 0.0009, hipotesis shortcut ukuran DITOLAK.** Grad-CAM masih wajib untuk cek shortcut background (Flag 4). Checkpoint: `model_s9_baseline_cv0.9823.pt` |
+| exp_id | Stage | Model | Data | CV | LB | Delta vs prior | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| exp001 | Fase 1 Baseline | ConvNeXt V2-Tiny, plain CE, no aug/EMA/CutMix, fold 0, 15 epoch | KOTOR (pre-relabel) | 0.9823 | - | - | F1 Electronic=0.994. Ini yang di-Grad-CAM, menemukan 4 mislabel. Checkpoint TERTIMPA oleh exp001-rerun (nama file sama). |
+| exp001-rerun | Fase 1 Baseline (re-run tidak sengaja) | ConvNeXt V2-Tiny, plain CE, identik exp001 | **KOTOR juga** (loader tidak di-reload pasca-relabel) | 0.9827 | - | +0.0004 vs exp001 (stokastisitas training, BUKAN efek relabel) | F1 Electronic=0.995. Checkpoint: `model_s9_baseline_cv0.9827.pt` |
+| exp002 | Fase 3 | ConvNeXt V2-Tiny, Class-Balanced Loss (beta=0.9999) + Weighted Random Sampler | **BERSIH** (pertama kali pakai data pasca-relabel) | 0.9809 | - | -0.0018 vs exp001-rerun (**TIDAK VALID dibandingkan — beda data DAN beda loss sekaligus**) | F1 Electronic=0.992 (turun dari kotor 0.995). Checkpoint: `model_exp002_cbloss_cv0.9809.pt`. Kesimpulan dampak CB-Loss DITUNDA sampai ada clean baseline pembanding. |
+| exp003 | Fase 3 (PENDING) | ConvNeXt V2-Tiny, plain CE, **data bersih** | BERSIH | **BELUM DIJALANKAN** | - | - | **WAJIB dijalankan** — true clean baseline untuk bandingkan validitas exp002 |
 
 ## VALIDATION STRATEGY — LOCKED per 2 Juli 2026
 - CV method     : **StratifiedGroupKFold** (menggantikan StratifiedKFold biasa)
@@ -387,6 +390,12 @@ Gunakan bagian ini untuk hal-hal yang tidak masuk kategori di atas:
 - **[4 Juli 2026] [Ababil]:** **Relabel 4 file mislabel — SELESAI DIEKSEKUSI.** Keputusan: relabel manual (bukan exclude), karena hanya 4 file dan sudah diverifikasi visual langsung. R_3825.jpg: 0→1, R_3733.jpg: 0→1, O_7776.jpg: 2→1, battery_61.jpg: 1→0. Backup pre-relabel tersimpan: `train_master_with_folds_PRE_RELABEL_BACKUP.csv`. Distribusi kelas pasca-relabel nyaris tidak berubah (Recyclable 37,83%→37,83%, Electronic 14,97%→14,99%, Organic 47,18%→47,18%) — dampak signifikan tidak diharapkan dari 4 file, tapi tetap dicatat untuk audit trail. `train_master_with_folds.csv` (versi kerja/output) sudah ter-update; siap untuk training ulang.
 - **[4 Juli 2026] [Ababil]:** **CATATAN caption-like investigation**: 10/333 sample diverifikasi visual, semua benar (tidak ada mislabel tambahan ditemukan). Keputusan: 10-sample dianggap cukup representatif, TIDAK cek 333 file satu-satu — trade-off waktu vs kepastian marjinal disetujui secara sadar (bukan diabaikan begitu saja).
 - **[4 Juli 2026] [Ababil]:** **SOURCE CODE REFERENCE disinkronkan penuh** dari source code asli (35 cell: 0, 0b, 0c, 1-34, termasuk 32b) yang diupload Ababil — section sebelumnya berisi banyak nomor cell perkiraan/belum terkonfirmasi, sekarang akurat 1:1 dengan kode berjalan. Perubahan struktural penting: pipeline EDA+cleaning+modeling ternyata linear dalam satu notebook (bukan terpisah seperti draft lama), Grad-CAM+mislabel-cleaning masuk sebagai Cell 28-34 (bukan tahap terpisah di luar notebook). Lihat section SOURCE CODE REFERENCE di bawah untuk detail lengkap.
+- **[4 Juli 2026] [Ababil]:** **KOREKSI PENOMORAN EKSPERIMEN — penting untuk audit trail.** 3 training run sudah dilakukan, TERNYATA baru 1 yang pakai data bersih:
+  1. **exp001** (training pertama): plain CE, **data KOTOR** (sebelum relabel Cell 34). CV macro F1=**0.9823**. Ini yang di-Grad-CAM & menemukan 4 mislabel.
+  2. **exp001-rerun** (training kedua, TIDAK direncanakan sebagai eksperimen baru, sekadar re-run Cell 27 biasa): plain CE, **DATA MASIH KOTOR juga** (loader tidak di-rebuild dari CSV yang sudah direlabel — relabel Cell 34 baru dieksekusi TAPI loader di memori/run ini belum reload). CV macro F1=**0.9827** — beda dari exp001 murni karena stokastisitas training (RandAugment, dst.), BUKAN karena data beda. **File checkpoint/CSV-nya menimpa nama yang sama dengan exp001** (`model_s9_baseline_cv{score}.pt`, `training_history_baseline.csv`) — jadi angka 0.9823 asli sudah tertimpa di disk, cuma tercatat di CATATAN BEBAS entry sebelumnya.
+  3. **exp002** (Cell 35 baru — Class-Balanced Loss + Weighted Random Sampler): ini eksperimen PERTAMA yang benar-benar pakai **data bersih** (loader di-rebuild dari `train_master_with_folds.csv` pasca-relabel di dalam Cell 35 itu sendiri). CV macro F1=**0.9809**.
+  - **⚠️ GAP PENTING**: belum ada baseline plain CE dengan data bersih untuk pembanding apple-to-apple terhadap exp002. Perbandingan 0.9809 (exp002) vs 0.9827 (exp001-rerun, data kotor) **TIDAK VALID** karena 2 variabel berubah sekaligus (loss function DAN kebersihan data). **exp003 yang seharusnya dijalankan dulu**: plain CE + data bersih (pakai Cell 21 rebuild loader dari CSV bersih, TANPA CB-Loss/Sampler) sebagai true baseline pembanding.
+- **[4 Juli 2026] [Ababil]:** **exp002 (CB-Loss+Sampler) hasil awal — perlu direvalidasi ulang setelah true clean baseline (exp003) ada.** Sementara ini (dibandingkan dengan data kotor, TIDAK VALID secara metodologi): F1 Electronic turun dari 0.9950→0.9919, macro F1 turun 0.9827→0.9809. Kemungkinan penyebab (masih hipotesis, belum firm): (a) Electronic sudah near-ceiling di baseline, ruang improvement CB-Loss terbatas; (b) oversampling agresif menyebabkan overfit ke variasi terbatas Electronic (cuma 3.166 sample asli); (c) CB-Loss weight (1.56x untuk Electronic) mungkin terlalu agresif untuk imbalance yang tidak terlalu ekstrem (3,2:1). **Kesimpulan DITUNDA sampai exp003 (clean baseline) selesai untuk perbandingan yang valid.**
 - **[4 Juli 2026] [Ababil]:** **Grad-CAM diagnostic SELESAI — GATE FASE 1→2 CLEARED.** Total 24 sample dianalisis dalam 2 batch:
   - **Batch 1 (16 sample, semua prediksi benar)**: Recyclable plain-bg (5) + Recyclable complex-bg kontrol (3) + Electronic icon150 (5) + Electronic natural kontrol (3). Hasil: aktivasi konsisten fokus ke objek/fitur diskriminatif (teks, logo, badan objek), TIDAK ke background kosong. 1 sample agak menyebar ke area sekitar objek kecil (karet/gelang) tapi tidak signifikan.
   - **Batch 2 (10 sample, error case Electronic — 4 FP + 6 FN)**: SEMUA aktivasi tetap fokus ke objek, bahkan pada kasus salah prediksi. Error ternyata didominasi 2 sumber: (a) ambiguitas visual genuine (logam bisa Recyclable/Electronic), (b) **kandidat mislabel ground truth baru** — minimal 3-4 kasus terlihat sangat jelas salah label secara visual (2 gambar laptop dilabel Recyclable, 1 panel/tombol elektronik dilabel Organic, 1 foto botol-botol dilabel Electronic).
