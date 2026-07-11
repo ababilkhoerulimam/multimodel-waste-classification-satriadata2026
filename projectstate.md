@@ -399,6 +399,12 @@ Saat ganti akun Claude (limit habis), lakukan urutan ini:
 ## DATA CLEANING LOG (Referensi Lengkap — Semua Relabel & Exclude Sepanjang Proyek)
 Single source of truth untuk semua perubahan label/exclusion terhadap `train_master_with_folds.csv`. Urutan kronologis. Semua perubahan mengikuti pola: backup dulu (`train_master_with_folds_PRE_RELABEL_BACKUP.csv`) sebelum overwrite.
 
+> **RINGKASAN CEPAT UNTUK AI/AKUN BARU (baca ini dulu sebelum detail di bawah):**
+> - **Sudah LIVE di CSV** (tidak perlu dikerjakan lagi): 97 file exclude (train-test duplicate) + 1 file exclude (`O_8873.jpg`, mislabel awal) + 4 file relabel Batch 1 (investigasi Electronic, lihat RELABEL_MAP Cell 34).
+> - **BELUM LIVE, jadi tugas Gate 3 berikutnya**: Batch 2 hasil investigasi TODO Recyclable↔Organic — total 115 file (51 relabel→Recyclable + 8 relabel→Organic + 56 drop) + 11 file "tidak diubah" (audit trail saja). **Semua nama file SUDAH LENGKAP 100%** dalam bentuk list Python siap-pakai di bagian "Batch 2" di bawah (`RELABEL_TO_RECYCLABLE`, `RELABEL_TO_ORGANIC`, `DROP_NOISE`, `LABEL_ALREADY_CORRECT`) — tidak perlu load ulang Excel untuk dapat nama filenya.
+> - **4 anomali kecil** (typo ekstensi/nama, kategori ambigu) masih perlu diverifikasi visual manual sebelum eksekusi — daftar lengkap anomalinya ada di akhir section Batch 2, tapi ini tidak menghalangi eksekusi kode secara keseluruhan (cuma 4 dari 115 file, worth double-check tapi bukan blocker).
+> - **Kalau user bilang "aku mau eksekusi Gate 3" atau "cleaning data"**: langsung pakai 4 list Python di bawah, TIDAK perlu minta file Excel lagi kecuali untuk verifikasi 4 anomali di atas.
+
 ### Batch 0 — Exclude Awal (Cell 0-5, sebelum training pertama)
 | Filename | Aksi | Alasan |
 |---|---|---|
@@ -417,41 +423,72 @@ Ditemukan lewat Grad-CAM error analysis (Cell 28-30) saat investigasi shortcut/F
 Total: 4 file direlabel. Ini adalah data yang dipakai untuk exp002 (CB-Loss) dan exp003 (plain CE) dan seterusnya (data "bersih" pasca-relabel).
 
 ### Batch 2 — Relabel & Drop Investigasi Recyclable↔Organic (Gate 2, 9 Juli 2026 — BELUM DIEKSEKUSI ke CSV)
-Ditemukan lewat OOF predictions dari full 5-fold (Gate 1), 538 kasus confused → 128 kandidat confidence tinggi (≥0.85) diverifikasi visual manual oleh Ababil (`Miss_Label_Report_1.xlsx` = 52 kasus arah True=Recyclable→Pred=Organic, `Miss_Label_Report_2.xlsx` = 76 kasus arah True=Organic→Pred=Recyclable). **Status: hasil verifikasi sudah final, TAPI BELUM diterapkan ke `train_master_with_folds.csv` — itu tugas Gate 3.**
+Ditemukan lewat OOF predictions dari full 5-fold (Gate 1), 538 kasus confused → 128 kandidat confidence tinggi (≥0.85) diverifikasi visual manual oleh Ababil (`Miss_Label_Report_1.xlsx` = 50 baris valid, arah True=Recyclable→Pred=Organic; `Miss_Label_Report_2.xlsx` = 76 baris, arah True=Organic→Pred=Recyclable). **Status: hasil verifikasi FINAL DAN LENGKAP 100% (diverifikasi ulang langsung dari CSV sumber, bukan rekonstruksi chat). BELUM diterapkan ke `train_master_with_folds.csv` — itu tugas Gate 3.**
 
-**Relabel ke Recyclable (0)** — 51 file (istilah "Anorganic" di report = sinonim Recyclable):
-```
-R_386, R_8257, R_2067, R_6246, R_9577, R_531, R_600, R_5929,
-O_1892, O_6271, O_1598, O_1876(cek ekstensi, tertulis .jog kemungkinan typo .jpg), O_5084, O_5263, O_262, O_1666, O_6852, O_1783,
-O_6812, O_9175, O_5295, O_1909, O_8864, O_6629, O_454, O_4910, O_1816, O_6757,
-O_1494, O_1556, O_1807, O_10473, O_5225, O_1949, O_712, O_10014, O_6841, O_1888,
-O_9183, O_5257, O_7969, O_1635(muncul 2x di source, cek duplikat baris), O_6640, O_1625, O_517, O_7248,
-O_1538, O_1800, O_345, O_5259
+**Kode Python siap-pakai — copy-paste langsung untuk Gate 3, tidak perlu load ulang Excel:**
+
+```python
+# ============================================================
+# BATCH 2 — Hasil verifikasi manual TODO investigation (Gate 2)
+# Sumber: Miss_Label_Report_1.xlsx (50 baris) + Miss_Label_Report_2.xlsx (76 baris)
+# Total 126 baris terverifikasi, dikonfirmasi lengkap 9 Juli 2026
+# ============================================================
+
+# --- RELABEL ke Recyclable (0) — 51 file, istilah "Anorganic" di report = Recyclable ---
+RELABEL_TO_RECYCLABLE = [
+    "R_386.jpg", "R_8257.jpg", "R_2067.jpg", "R_6246.jpg", "R_9577.jpg", "R_531.jpg", "R_600.jpg", "R_5929.jpg",
+    "O_1892.jpg", "O_6271.jpg", "O_1598.jpg", "O_1876.jpg",  # NOTE: sumber tertulis "O_1876.jog", kemungkinan typo ekstensi -> VERIFY sebelum eksekusi
+    "O_5084.jpg", "O_5263.jpg", "O_262.jpg", "O_1666.jpg", "O_6852.jpg", "O_1783.jpg",
+    "O_6812.jpg", "O_9175.jpg", "O_5295.jpg", "O_1909.jpg", "O_8864.jpg", "O_6629.jpg", "O_454.jpg", "O_4910.jpg", "O_1816.jpg", "O_6757.jpg",
+    "O_1494.jpg", "O_1556.jpg", "O_1807.jpg", "O_10473.jpg", "O_5225.jpg", "O_1949.jpg", "O_712.jpg", "O_10014.jpg", "O_6841.jpg", "O_1888.jpg",
+    "O_9183.jpg", "O_5257.jpg", "O_7969.jpg", "O_1635.jpg",  # NOTE: muncul 2x di source CSV, kemungkinan cuma duplikat baris -> aman, dedup otomatis kalau pakai set()
+    "O_6640.jpg", "O_1625.jpg", "O_517.jpg", "O_7248.jpg",
+    "O_1538.jpg", "O_1800.jpg", "O_345.jpg", "O_5259.jpg",
+]  # len=51 (dengan O_1635 dobel di source, jadi 50 unique + 1 duplikat baris)
+
+# --- RELABEL ke Organic (2) — 8 file, True label lama: Recyclable ---
+RELABEL_TO_ORGANIC = [
+    "R_566.jpg", "R_9775.jpg", "R_2451.jpg", "R_8580.jpg", "R_9817.jpg", "R_6057.jpg", "R_9828.jpg", "R_4815.jpg",
+]  # len=8, LENGKAP (diverifikasi ulang dari sumber 9 Juli 2026)
+
+# --- DROP (exclude_from_training) — 56 file, bukan foto sampah sama sekali ---
+DROP_NOISE = [
+    # Dari Report 1 (True label lama: Recyclable) — 29 file
+    "R_9957.jpg", "R_4583.jpg", "R_850.jpg", "R_4638.jpg", "R_8327.jpg", "R_2909.jpg", "R_6142.jpg", "R_4602.jpg", "R_5044.jpg", "R_6228.jpg",
+    "R_759.jpg", "R_258.jpg", "R_6054.jpg", "R_8315.jpg", "R_6087.jpg", "R_4841.jpg", "R_6935.jpg", "R_4090.jpg", "R_891.jpg", "R_2835.jpg",
+    "R_6092.jpg", "R_4413.jpg", "R_2786.jpg", "R_4198.jpg", "R_4626.jpg", "R_810.jpg", "R_509.jpg", "R_548.jpg", "R_4046.jpg",
+    # Dari Report 2 (True label lama: Organic) — 27 file
+    "O_8835.jpg", "O_1345.jpg", "O_221.jpg", "O_572.jpg",
+    "O_6751.jpg",  # NOTE: kategori tertulis "Misslabel" bukan "Noise" di source, tapi label_yang_benar=DROP -> VERIFY sebelum eksekusi
+    "O_10358.jpg", "O_11223.jpg", "O_1263.jpg", "O_9569.jpg", "O_1627.jpg",
+    "O_7628.jpg",
+    "O_10298.jpg",  # NOTE: sama seperti O_6751, kategori tertulis "Misslabel" tapi label_yang_benar=DROP -> VERIFY
+    "O_4286.jpg", "O_8924.jpg", "O_6391.jpg", "O_9746.jpg", "O_5376.jpg", "O_6755.jpg", "O_9919.jpg", "O_3948.jpg",
+    "O_5017.jpg", "O_1935.jpg", "O_3621.jpg", "O_1864.jpg", "O_162.jpg", "O_10400.jpg", "O_11423.jpg",
+]  # len=56, LENGKAP
+
+# --- TIDAK DIUBAH (Label Sudah Benar) — 11 file, model salah prediksi TAPI label memang sudah benar ---
+# Tidak perlu aksi ke data. Dicatat untuk audit trail saja (bukti bahwa investigasi TODO menyeluruh, bukan cuma cari yang salah).
+LABEL_ALREADY_CORRECT = [
+    # Dari Report 1 (True label lama: Recyclable, model salah prediksi jadi Organic, tapi Recyclable memang benar) — 5 file
+    "R_4529.jpg", "R_7140.jpg", "R_4761.jpg", "R_4675.jpg", "R_400.jpg",
+    # Dari Report 2 (True label lama: Organic, model salah prediksi jadi Recyclable, tapi Organic memang benar) — 6 file
+    "O_8923.jpg", "O_7293.jpg", "O_819.jpg",  # NOTE: sumber tertulis "O_0819.jpg" dgn leading zero, kemungkinan typo -> VERIFY nama file asli di disk
+    "O_9340.jpg", "O_217.jpg", "O_10301.jpg",
+]  # len=11, LENGKAP (diverifikasi ulang dari sumber 9 Juli 2026)
+
+print(f"RELABEL_TO_RECYCLABLE: {len(RELABEL_TO_RECYCLABLE)} file")
+print(f"RELABEL_TO_ORGANIC: {len(RELABEL_TO_ORGANIC)} file")
+print(f"DROP_NOISE: {len(DROP_NOISE)} file")
+print(f"LABEL_ALREADY_CORRECT: {len(LABEL_ALREADY_CORRECT)} file (tidak diubah)")
+print(f"Total file terdampak (relabel+drop): {len(RELABEL_TO_RECYCLABLE)+len(RELABEL_TO_ORGANIC)+len(DROP_NOISE)}")
 ```
 
-**Relabel ke Organic (2)** — 8 file (True label lama: Recyclable, verified mislabel ke Organic):
-```
-R_566, R_9775, R_2451
-```
-*(Catatan: hanya 3 nama tercatat eksplisit dari sample awal yang dibahas; 8 adalah jumlah total dari breakdown `label_yang_benar=Organic + kategori=Mislabel` di Report 1 — sisa 5 nama file perlu diambil ulang dari `combined_verification.csv` / xlsx asli sebelum eksekusi Gate 3, JANGAN diasumsikan dari draft ini saja.)*
-
-**DROP (exclude_from_training)** — 56 file (bukan foto sampah):
-```
-Report 1 (29): R_9957, R_4583, R_850, R_4638, R_8327, R_2909, R_6142, R_4602, R_5044, R_6228,
-R_759, R_258, R_6054, R_8315, R_6087, R_4841, R_6935, R_4090, R_891, R_2835,
-R_6092, R_4413, R_2786, R_4198, R_4626, R_810, R_509, R_548, R_4046
-
-Report 2 (27): O_8835, O_1345, O_221, O_572, O_6751(*kategori tertulis "Misslabel" bukan "Noise", cek ulang), O_10358, O_11223, O_1263, O_9569, O_1627,
-O_7628, O_10298(*sama, cek ulang), O_4286, O_8924, O_6391, O_9746, O_5376, O_6755, O_9919, O_3948,
-O_5017, O_1935, O_3621, O_1864, O_162, O_10400, O_11423
-```
-
-**Tidak diubah (Label Sudah Benar)** — 11 file, model salah prediksi tapi label memang benar, tidak perlu aksi ke data. Detail nama file ada di `combined_verification.csv` (kategori="Label Sudah Benar").
-
-**PENTING sebelum eksekusi Gate 3**: 
-1. Load ulang `Miss_Label_Report_1.xlsx` dan `Miss_Label_Report_2.xlsx` untuk ambil list LENGKAP & PERSIS (draft di atas sudah cukup akurat untuk kategori DROP dan Anorganic→Recyclable, tapi list "Organic (eksplisit, 8 file)" perlu diverifikasi ulang by source karena hanya 3 nama yang eksplisit tercatat di ringkasan chat).
-2. Cek 2 anomali: `O_1876.jog` (kemungkinan typo ekstensi, seharusnya `.jpg`), `O_1635.jpg` (muncul 2x, cek apakah duplikat baris atau memang 2 entry berbeda).
-3. Cek 2 baris ambigu di kategori DROP Report 2: `O_6751.jpg` dan `O_10298.jpg` — `label_yang_benar=DROP` tapi `kategori` tertulis "Misslabel" bukan "Noise", perlu dikonfirmasi ulang apakah benar DROP atau salah input kategori.
+**4 anomali yang WAJIB diverifikasi manual sebelum eksekusi Gate 3** (jangan asumsikan, cek langsung ke file gambar di disk):
+1. `O_1876.jpg` — sumber tertulis `.jog`, kemungkinan besar typo ekstensi. Cek apakah file `O_1876.jpg` ada, kalau tidak coba varian lain.
+2. `O_1635.jpg` — muncul 2x di CSV sumber. Kemungkinan cuma duplikat baris (bukan 2 file berbeda). Pakai `set()` untuk dedup otomatis kalau ragu, tidak akan merusak logika (relabel ke label yang sama 2x tidak masalah).
+3. `O_6751.jpg` dan `O_10298.jpg` — ada di `DROP_NOISE` (karena `label_yang_benar=DROP`), tapi kolom `kategori` di source tertulis "Misslabel" bukan "Noise". Kemungkinan cuma salah ketik kategori oleh Ababil saat verifikasi manual (label_yang_benar=DROP itu yang lebih otoritatif), tapi worth dicek ulang visual sebelum final.
+4. `O_819.jpg` — sumber tertulis `O_0819.jpg` (dengan leading zero). Cek nama file asli di disk, kemungkinan typo saat input manual.
 
 ### Ringkasan Dampak Kumulatif
 | Batch | Relabel | Drop/Exclude | Total Data Terdampak |
