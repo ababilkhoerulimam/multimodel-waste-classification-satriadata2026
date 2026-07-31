@@ -1,0 +1,3 @@
+filepath,filename,partition,label,size_bytes,mod_time,mod_datetime,md5,is_corrupted,width,height,mode,format,aspect_ratio,phash,mean_brightness,std_brightness
+c:/Github/BDC2026\train\0_Recyclable\R_799.jpg,R_799.jpg,train,0_Recyclable,6554,1604328422.0,2020-11-02 21:47:02,95bd2693fd68b87d40601c3002ebdf21,False,225,224,RGB,JPEG,1.0044642857142858,b8848768db061f7b,156.50124338624337,40.07250329764842
+c:/Github/BDC2026\train\2_Organic\O_8873.jpg,O_8873.jpg,train,2_Organic,6554,1604328416.0,2020-11-02 21:46:56,95bd2693fd68b87d40601c3002ebdf21,False,225,224,RGB,JPEG,1.0044642857142858,b8848768db061f7b,156.50124338624337,40.07250329764842
