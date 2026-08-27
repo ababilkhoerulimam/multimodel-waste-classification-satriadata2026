@@ -1,0 +1,5 @@
+Test ID,Margin,Sub2,Grid Best,Internet,ConvNeXt,EVA,SigLIP,DINO,Duplicate?
+195,0.0518,R,R,R,R,E,R,E,Internet (R)
+438,0.0053,R,R,R,O,O,O,R,Internet (R)
+899,0.0592,O,R,R,O,O,O,R,Internet (R)
+1091,0.0270,R,R,R,O,R,R,O,Internet (R)

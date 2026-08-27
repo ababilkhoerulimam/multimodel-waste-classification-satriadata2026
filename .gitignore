@@ -102,10 +102,14 @@ dmypy.json
 # ---- OS files ----
 .DS_Store
 Thumbs.db
+desktop.ini
+*.tmp
+*.bak
 
 # ---- Logs umum ----
 *.log
 
-!submission*.csv
+!submissions/*.csv
+!reports/*.csv
 !README.md
 !LICENSE

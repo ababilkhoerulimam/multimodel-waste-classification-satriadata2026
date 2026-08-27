@@ -1,0 +1,9 @@
+Test_ID,Sub2_Margin,Sub2,Rank1,SigLIP_High,Internet,ConvNeXt,EVA02,SigLIP,DINOv2,Duplicate?
+76,0.1638,Organic,Organic,Recyclable,Organic,Organic (0.71),Recyclable (0.53),Recyclable (0.52),Organic (0.86),Internet (Recyclable)
+195,0.0518,Recyclable,Recyclable,Recyclable,Recyclable,Recyclable (0.66),Electronic (0.41),Recyclable (0.52),Electronic (0.91),Internet (Recyclable)
+438,0.0053,Recyclable,Recyclable,Organic,Recyclable,Organic (0.60),Organic (0.46),Organic (0.55),Recyclable (0.92),Internet (Recyclable)
+899,0.0592,Organic,Recyclable,Organic,Recyclable,Organic (0.51),Organic (0.70),Organic (0.56),Recyclable (0.91),Internet (Recyclable)
+1053,0.044,Recyclable,Recyclable,Organic,Recyclable,Recyclable (0.50),Organic (0.46),Organic (0.50),Recyclable (0.69),Internet (Organic)
+1091,0.027,Recyclable,Recyclable,Recyclable,Recyclable,Organic (0.50),Recyclable (0.58),Recyclable (0.57),Organic (0.80),Internet (Recyclable)
+1136,0.0698,Recyclable,Recyclable,Organic,Recyclable,Recyclable (0.53),Organic (0.55),Organic (0.46),Recyclable (0.79),Internet (Recyclable)
+1423,0.1149,Organic,Organic,Recyclable,Recyclable,Organic (0.57),Recyclable (0.49),Recyclable (0.49),Organic (0.75),Internet (Recyclable)
