@@ -1,4 +1,6 @@
 <div align="center">
+  <img src="repo.png" alt="Logo" width="128" height="128">
+
   <h1>BDC Satria Data 2026 - Waste Classification</h1>
   <p><strong>Multiclass Image Classification with 4-Model Vision Ensemble and Leakage-Aware Validation</strong></p>
 
